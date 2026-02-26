@@ -1,0 +1,12 @@
+-- K-14: Service role bypass documentation
+--
+-- Supabase service role is expected to have BYPASSRLS and is used by server-side
+-- operations in Next.js when SUPABASE_SERVICE_ROLE_KEY is configured.
+--
+-- API routes in this codebase still enforce organization_id filters explicitly.
+-- RLS is an additional safeguard for direct database access paths.
+--
+-- Optional verification query (run manually in SQL editor):
+--   SELECT rolname, rolbypassrls
+--   FROM pg_roles
+--   WHERE rolname IN ('service_role', 'authenticated', 'anon');

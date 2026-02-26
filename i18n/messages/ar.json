@@ -1,0 +1,231 @@
+{
+  "common": {
+    "appName": "نظام العيادة",
+    "pageNotFound": "الصفحة غير موجودة",
+    "pageNotFoundHint": "الصفحة التي تبحث عنها غير موجودة أو تم نقلها.",
+    "goHome": "العودة للرئيسية",
+    "somethingWentWrong": "حدث خطأ ما",
+    "tryAgain": "حاول مرة أخرى",
+    "loading": "جارٍ التحميل...",
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "delete": "حذف",
+    "edit": "تعديل",
+    "create": "إنشاء",
+    "search": "بحث",
+    "noResults": "لم يتم العثور على نتائج",
+    "confirm": "تأكيد",
+    "back": "رجوع",
+    "next": "التالي",
+    "yes": "نعم",
+    "no": "لا",
+    "signOut": "تسجيل الخروج"
+  },
+  "auth": {
+    "signIn": "تسجيل الدخول",
+    "signOut": "تسجيل الخروج",
+    "email": "البريد الإلكتروني",
+    "password": "كلمة المرور",
+    "contactAdmin": "ليس لديك حساب؟ تواصل مع المسؤول.",
+    "unauthorized": "غير مصرح لك بعرض هذه الصفحة",
+    "sessionExpired": "انتهت صلاحية جلستك. يرجى تسجيل الدخول مرة أخرى.",
+    "errors": {
+      "invalidCredentials": "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
+      "userNotFound": "لم يتم العثور على حسابك. تواصل مع المسؤول."
+    }
+  },
+  "nav": {
+    "dashboard": "لوحة التحكم",
+    "scheduling": "الجدولة",
+    "patients": "المرضى",
+    "billing": "الفواتير",
+    "plans": "الخطط",
+    "reception": "الاستقبال",
+    "reports": "التقارير",
+    "automation": "الأتمتة",
+    "settings": "الإعدادات"
+  },
+  "settings": {
+    "nav": {
+      "services": "الخدمات",
+      "providerTypes": "أنواع مقدمي الخدمة",
+      "clinicInfo": "معلومات العيادة",
+      "whatsapp": "واتساب",
+      "payments": "طرق الدفع",
+      "policies": "السياسات",
+      "users": "المستخدمون",
+      "providers": "مقدمو الخدمة"
+    },
+    "policies": {
+      "riskThreshold": "حد مخاطر عدم الحضور",
+      "depositRequired": "اشتراط إيداع فوق مستوى المخاطر",
+      "inactivityWarning": "تحذير عدم النشاط (أيام)",
+      "inactivityCritical": "عدم نشاط حرج (أيام)",
+      "largeDiscountThreshold": "حد الخصم الكبير (%)"
+    },
+    "services": {
+      "newService": "خدمة جديدة",
+      "priceChangeWarning": "سيتم تسجيل تغيير السعر هذا. متابعة؟"
+    },
+    "users": {
+      "inviteUser": "دعوة مستخدم",
+      "roles": "الأدوار",
+      "deactivate": "إلغاء التفعيل"
+    }
+  },
+  "reports": {
+    "subtitle": "التحليلات والتقارير",
+    "tabs": {
+      "revenue": "الإيرادات",
+      "unpaid": "الفواتير غير المدفوعة",
+      "planConversion": "تحويل الخطط"
+    },
+    "dateRange": {
+      "startLabel": "تاريخ البداية",
+      "endLabel": "تاريخ النهاية",
+      "invalidRange": "يجب أن يكون تاريخ النهاية بعد تاريخ البداية.",
+      "last7": "آخر 7 أيام",
+      "last30": "آخر 30 يوم",
+      "last3months": "آخر 3 أشهر",
+      "thisYear": "هذه السنة"
+    },
+    "revenue": {
+      "title": "الإيرادات",
+      "total": "إجمالي الإيرادات",
+      "count": "المدفوعات",
+      "average": "متوسط الدفع",
+      "empty": "لا توجد بيانات إيرادات لهذه الفترة.",
+      "allProviders": "جميع الأطباء",
+      "allServices": "جميع الخدمات",
+      "byProvider": "حسب الطبيب",
+      "byService": "حسب الخدمة",
+      "provider": "الطبيب",
+      "service": "الخدمة"
+    },
+    "unpaid": {
+      "title": "الفواتير غير المدفوعة",
+      "totalAmount": "إجمالي المستحق",
+      "count": "عدد الفواتير غير المدفوعة",
+      "partiallyPaid": "مدفوع جزئيا",
+      "issued": "مصدرة",
+      "partiallyPaidStatus": "مدفوعة جزئيا",
+      "empty": "كل الفواتير مدفوعة.",
+      "columns": {
+        "invoice": "رقم الفاتورة",
+        "patient": "المريض",
+        "provider": "الطبيب",
+        "total": "الإجمالي",
+        "amountPaid": "المدفوع",
+        "balanceDue": "المتبقي",
+        "daysOutstanding": "أيام التأخر",
+        "status": "الحالة"
+      }
+    },
+    "planConversion": {
+      "title": "تحويل الخطط",
+      "proposed": "مقترحة",
+      "accepted": "مقبولة",
+      "completed": "مكتملة",
+      "empty": "لا توجد بيانات خطط لهذه الفترة.",
+      "allProviders": "جميع الأطباء",
+      "monthlyTrend": "الاتجاه الشهري",
+      "month": "الشهر",
+      "conversionRate": "معدل التحويل",
+      "providerBreakdown": "تفصيل حسب الطبيب",
+      "provider": "الطبيب"
+    }
+  },
+  "patients": {
+    "tabs": {
+      "overview": "نظرة عامة",
+      "notes": "الملاحظات",
+      "appointments": "المواعيد",
+      "plans": "الخطط",
+      "billing": "الفواتير"
+    },
+    "risk": {
+      "low": "خطر منخفض",
+      "moderate": "خطر متوسط",
+      "high": "خطر مرتفع",
+      "tooltip": "عدد حالات عدم الحضور: {count}"
+    },
+    "actions": {
+      "bookAppointment": "حجز موعد",
+      "createPlan": "إنشاء خطة",
+      "createInvoice": "إنشاء فاتورة",
+      "newPatient": "مريض جديد"
+    },
+    "title": "المرضى",
+    "subtitle": "إدارة سجلات المرضى والبيانات الديموغرافية",
+    "addPatient": "إضافة مريض",
+    "searchPlaceholder": "البحث بالاسم أو الهاتف أو البريد الإلكتروني...",
+    "firstName": "الاسم الأول",
+    "lastName": "اسم العائلة",
+    "dateOfBirth": "تاريخ الميلاد",
+    "gender": "الجنس",
+    "male": "ذكر",
+    "female": "أنثى",
+    "other": "آخر",
+    "email": "البريد الإلكتروني",
+    "phone": "الهاتف",
+    "phoneSecondary": "هاتف ثانوي",
+    "address": "العنوان",
+    "preferredLocale": "اللغة المفضلة",
+    "active": "نشط",
+    "inactive": "غير نشط",
+    "createPatient": "إنشاء مريض",
+    "editPatient": "تعديل المريض",
+    "patientDetails": "تفاصيل المريض",
+    "noPatients": "لا يوجد مرضى بعد",
+    "noPatientsHint": "أضف أول مريض للبدء",
+    "totalPatients": "إجمالي المرضى",
+    "activePatients": "نشط",
+    "showInactive": "عرض غير النشطين",
+    "patientId": "رقم المريض",
+    "age": "العمر",
+    "yearsOld": "سنة",
+    "personalInfo": "المعلومات الشخصية",
+    "contactInfo": "معلومات الاتصال",
+    "recordInfo": "معلومات السجل",
+    "lastUpdated": "آخر تحديث",
+    "createdAt": "تاريخ الإنشاء",
+    "call": "اتصال",
+    "sendEmail": "إرسال بريد",
+    "scheduleAppointment": "حجز موعد",
+    "overview": "نظرة عامة",
+    "noData": "غير متوفر",
+    "appointments": "المواعيد",
+    "recentAppointments": "المواعيد الأخيرة",
+    "noAppointments": "لا توجد مواعيد",
+    "viewAllAppointments": "عرض جميع المواعيد",
+    "notes": "الملاحظات",
+    "patientNotes": "الملاحظات السريرية",
+    "addNote": "إضافة ملاحظة",
+    "noNotes": "لا توجد ملاحظات",
+    "notePlaceholder": "إضافة ملاحظة عن هذا المريض...",
+    "summary": "ملخص",
+    "patientSummary": "ملخص المريض",
+    "totalVisits": "إجمالي الزيارات",
+    "completedVisits": "مكتملة",
+    "lastVisit": "آخر زيارة",
+    "status": "الحالة",
+    "provider": "الطبيب",
+    "services": "الخدمات",
+    "scheduled": "مجدول",
+    "confirmed": "مؤكد",
+    "completed": "مكتمل",
+    "canceled": "ملغى",
+    "noShow": "لم يحضر"
+  },
+  "scheduling": {
+    "rebook": {
+      "title": "إعادة حجز هذا المريض؟",
+      "suggestedDate": "التاريخ المقترح",
+      "provider": "الطبيب",
+      "service": "الخدمة",
+      "planProgress": "تقدم الخطة",
+      "bookNow": "احجز الآن",
+      "dismiss": "إغلاق"
+    }
+  }
+}

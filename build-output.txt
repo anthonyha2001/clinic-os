@@ -1,0 +1,31 @@
+﻿
+> clinic-os@0.1.0 build
+> next build
+
+  Γû▓ Next.js 14.2.35
+  - Environments: .env.local
+
+   Creating an optimized production build ...
+ Γ£ô Compiled successfully
+   Linting and checking validity of types ...
+node.exe : Failed to compile.
+At C:\nvm4w\nodejs\npm.ps1:16 char:5
++     & "$basedir/node$exe"  "$basedir/node_modules/npm/bin/npm-cli.js" ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Failed to compile.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+./app/[locale]/(auth)/auth/login/page.tsx:28:22
+Type error: Type '{ errorParam: string | undefined; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'errorParam' does not exist on type 'IntrinsicAttributes'.
+
+[0m [90m 26 |[39m         [33m<[39m[33m/[39m[33mh1[39m[33m>[39m[0m
+[0m [90m 27 |[39m         [33m<[39m[33mdiv[39m className[33m=[39m[32m"mt-8"[39m[33m>[39m[0m
+[0m[31m[1m>[22m[39m[90m 28 |[39m           [33m<[39m[33mLoginForm[39m errorParam[33m=[39m{error} 
+[33m/[39m[33m>[39m[0m
+[0m [90m    |[39m                      [31m[1m^[22m[39m[0m
+[0m [90m 29 |[39m         [33m<[39m[33m/[39m[33mdiv[39m[33m>[39m[0m
+[0m [90m 30 |[39m       [33m<[39m[33m/[39m[33mdiv[39m[33m>[39m[0m
+[0m [90m 31 |[39m     [33m<[39m[33m/[39m[33mdiv[39m[33m>[39m[0m
+Next.js build worker exited with code: 1 and signal: null

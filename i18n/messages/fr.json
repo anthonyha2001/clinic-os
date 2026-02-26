@@ -1,0 +1,231 @@
+{
+  "common": {
+    "appName": "Clinic OS",
+    "pageNotFound": "Page non trouvée",
+    "pageNotFoundHint": "La page que vous recherchez n'existe pas ou a été déplacée.",
+    "goHome": "Retour à l'accueil",
+    "somethingWentWrong": "Une erreur s'est produite",
+    "tryAgain": "Réessayer",
+    "loading": "Chargement...",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "create": "Créer",
+    "search": "Rechercher",
+    "noResults": "Aucun résultat trouvé",
+    "confirm": "Confirmer",
+    "back": "Retour",
+    "next": "Suivant",
+    "yes": "Oui",
+    "no": "Non",
+    "signOut": "Se déconnecter"
+  },
+  "auth": {
+    "signIn": "Se connecter",
+    "signOut": "Se déconnecter",
+    "email": "Adresse e-mail",
+    "password": "Mot de passe",
+    "contactAdmin": "Vous n'avez pas de compte ? Contactez votre administrateur.",
+    "unauthorized": "Vous n'êtes pas autorisé à voir cette page",
+    "sessionExpired": "Votre session a expiré. Veuillez vous reconnecter.",
+    "errors": {
+      "invalidCredentials": "Adresse e-mail ou mot de passe incorrect.",
+      "userNotFound": "Votre compte n'a pas été trouvé. Contactez votre administrateur."
+    }
+  },
+  "nav": {
+    "dashboard": "Tableau de bord",
+    "scheduling": "Planification",
+    "patients": "Patients",
+    "billing": "Facturation",
+    "plans": "Plans",
+    "reception": "Réception",
+    "reports": "Rapports",
+    "automation": "Automatisation",
+    "settings": "Paramètres"
+  },
+  "settings": {
+    "nav": {
+      "services": "Services",
+      "providerTypes": "Types de praticiens",
+      "clinicInfo": "Infos clinique",
+      "whatsapp": "WhatsApp",
+      "payments": "Moyens de paiement",
+      "policies": "Politiques",
+      "users": "Utilisateurs",
+      "providers": "Praticiens"
+    },
+    "policies": {
+      "riskThreshold": "Seuil de risque d'absence",
+      "depositRequired": "Exiger un acompte au-dessus du risque",
+      "inactivityWarning": "Avertissement d'inactivité (jours)",
+      "inactivityCritical": "Inactivité critique (jours)",
+      "largeDiscountThreshold": "Seuil de remise importante (%)"
+    },
+    "services": {
+      "newService": "Nouveau service",
+      "priceChangeWarning": "Ce changement de prix sera enregistré. Continuer ?"
+    },
+    "users": {
+      "inviteUser": "Inviter un utilisateur",
+      "roles": "Rôles",
+      "deactivate": "Désactiver"
+    }
+  },
+  "reports": {
+    "subtitle": "Analyses et rapports",
+    "tabs": {
+      "revenue": "Revenus",
+      "unpaid": "Factures impayees",
+      "planConversion": "Conversion des plans"
+    },
+    "dateRange": {
+      "startLabel": "Date de debut",
+      "endLabel": "Date de fin",
+      "invalidRange": "La date de fin doit etre apres la date de debut.",
+      "last7": "7 derniers jours",
+      "last30": "30 derniers jours",
+      "last3months": "3 derniers mois",
+      "thisYear": "Cette annee"
+    },
+    "revenue": {
+      "title": "Revenus",
+      "total": "Revenu total",
+      "count": "Paiements",
+      "average": "Paiement moyen",
+      "empty": "Aucune donnee de revenu pour cette periode.",
+      "allProviders": "Tous les praticiens",
+      "allServices": "Tous les services",
+      "byProvider": "Par praticien",
+      "byService": "Par service",
+      "provider": "Praticien",
+      "service": "Service"
+    },
+    "unpaid": {
+      "title": "Factures impayees",
+      "totalAmount": "Total en attente",
+      "count": "Factures impayees",
+      "partiallyPaid": "Partiellement payees",
+      "issued": "Emise",
+      "partiallyPaidStatus": "Partiellement payee",
+      "empty": "Toutes les factures sont payees.",
+      "columns": {
+        "invoice": "Facture #",
+        "patient": "Patient",
+        "provider": "Praticien",
+        "total": "Total",
+        "amountPaid": "Montant paye",
+        "balanceDue": "Solde du",
+        "daysOutstanding": "Jours en attente",
+        "status": "Statut"
+      }
+    },
+    "planConversion": {
+      "title": "Conversion des plans",
+      "proposed": "Propose",
+      "accepted": "Accepte",
+      "completed": "Termine",
+      "empty": "Aucune donnee de plan pour cette periode.",
+      "allProviders": "Tous les praticiens",
+      "monthlyTrend": "Tendance mensuelle",
+      "month": "Mois",
+      "conversionRate": "Taux de conversion",
+      "providerBreakdown": "Repartition par praticien",
+      "provider": "Praticien"
+    }
+  },
+  "patients": {
+    "tabs": {
+      "overview": "Aperçu",
+      "notes": "Notes",
+      "appointments": "Rendez-vous",
+      "plans": "Plans",
+      "billing": "Facturation"
+    },
+    "risk": {
+      "low": "Risque faible",
+      "moderate": "Risque modéré",
+      "high": "Risque élevé",
+      "tooltip": "Nombre d'absences: {count}"
+    },
+    "actions": {
+      "bookAppointment": "Prendre rendez-vous",
+      "createPlan": "Créer un plan",
+      "createInvoice": "Créer une facture",
+      "newPatient": "Nouveau patient"
+    },
+    "title": "Patients",
+    "subtitle": "Gérer les dossiers et données démographiques des patients",
+    "addPatient": "Ajouter un patient",
+    "searchPlaceholder": "Rechercher par nom, téléphone ou email...",
+    "firstName": "Prénom",
+    "lastName": "Nom",
+    "dateOfBirth": "Date de naissance",
+    "gender": "Genre",
+    "male": "Homme",
+    "female": "Femme",
+    "other": "Autre",
+    "email": "Email",
+    "phone": "Téléphone",
+    "phoneSecondary": "Téléphone secondaire",
+    "address": "Adresse",
+    "preferredLocale": "Langue préférée",
+    "active": "Actif",
+    "inactive": "Inactif",
+    "createPatient": "Créer un patient",
+    "editPatient": "Modifier le patient",
+    "patientDetails": "Détails du patient",
+    "noPatients": "Aucun patient",
+    "noPatientsHint": "Ajoutez votre premier patient pour commencer",
+    "totalPatients": "Total des patients",
+    "activePatients": "Actifs",
+    "showInactive": "Afficher les inactifs",
+    "patientId": "ID patient",
+    "age": "Âge",
+    "yearsOld": "ans",
+    "personalInfo": "Informations personnelles",
+    "contactInfo": "Coordonnées",
+    "recordInfo": "Informations du dossier",
+    "lastUpdated": "Dernière mise à jour",
+    "createdAt": "Créé le",
+    "call": "Appeler",
+    "sendEmail": "Envoyer un email",
+    "scheduleAppointment": "Prendre rendez-vous",
+    "overview": "Aperçu",
+    "noData": "Non renseigné",
+    "appointments": "Rendez-vous",
+    "recentAppointments": "Rendez-vous récents",
+    "noAppointments": "Aucun rendez-vous",
+    "viewAllAppointments": "Voir tous les rendez-vous",
+    "notes": "Notes",
+    "patientNotes": "Notes cliniques",
+    "addNote": "Ajouter une note",
+    "noNotes": "Aucune note",
+    "notePlaceholder": "Ajouter une note sur ce patient...",
+    "summary": "Résumé",
+    "patientSummary": "Résumé du patient",
+    "totalVisits": "Total des visites",
+    "completedVisits": "Réalisées",
+    "lastVisit": "Dernière visite",
+    "status": "Statut",
+    "provider": "Praticien",
+    "services": "Services",
+    "scheduled": "Planifié",
+    "confirmed": "Confirmé",
+    "completed": "Terminé",
+    "canceled": "Annulé",
+    "noShow": "Absent"
+  },
+  "scheduling": {
+    "rebook": {
+      "title": "Reprogrammer ce patient ?",
+      "suggestedDate": "Date suggeree",
+      "provider": "Praticien",
+      "service": "Service",
+      "planProgress": "Progression du plan",
+      "bookNow": "Reserver maintenant",
+      "dismiss": "Ignorer"
+    }
+  }
+}

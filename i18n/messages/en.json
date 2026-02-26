@@ -1,0 +1,231 @@
+{
+  "common": {
+    "appName": "Clinic OS",
+    "pageNotFound": "Page not found",
+    "pageNotFoundHint": "The page you're looking for doesn't exist or has been moved.",
+    "goHome": "Go to home",
+    "somethingWentWrong": "Something went wrong",
+    "tryAgain": "Try again",
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "search": "Search",
+    "noResults": "No results found",
+    "confirm": "Confirm",
+    "back": "Back",
+    "next": "Next",
+    "yes": "Yes",
+    "no": "No",
+    "signOut": "Sign Out"
+  },
+  "auth": {
+    "signIn": "Sign In",
+    "signOut": "Sign Out",
+    "email": "Email",
+    "password": "Password",
+    "contactAdmin": "Don't have an account? Contact your administrator.",
+    "unauthorized": "You are not authorized to view this page",
+    "sessionExpired": "Your session has expired. Please sign in again.",
+    "errors": {
+      "invalidCredentials": "Invalid email or password.",
+      "userNotFound": "Your account was not found. Contact your administrator."
+    }
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "scheduling": "Scheduling",
+    "patients": "Patients",
+    "billing": "Billing",
+    "plans": "Plans",
+    "reception": "Reception",
+    "reports": "Reports",
+    "automation": "Automation",
+    "settings": "Settings"
+  },
+  "settings": {
+    "nav": {
+      "services": "Services",
+      "providerTypes": "Provider Types",
+      "clinicInfo": "Clinic Info",
+      "whatsapp": "WhatsApp",
+      "payments": "Payment Methods",
+      "policies": "Policies",
+      "users": "Users",
+      "providers": "Providers"
+    },
+    "policies": {
+      "riskThreshold": "No-show risk threshold",
+      "depositRequired": "Require deposit above risk",
+      "inactivityWarning": "Inactivity warning (days)",
+      "inactivityCritical": "Inactivity critical (days)",
+      "largeDiscountThreshold": "Large discount threshold (%)"
+    },
+    "services": {
+      "newService": "New Service",
+      "priceChangeWarning": "This price change will be logged. Continue?"
+    },
+    "users": {
+      "inviteUser": "Invite User",
+      "roles": "Roles",
+      "deactivate": "Deactivate"
+    }
+  },
+  "reports": {
+    "subtitle": "Analytics and reports",
+    "tabs": {
+      "revenue": "Revenue",
+      "unpaid": "Unpaid Invoices",
+      "planConversion": "Plan Conversion"
+    },
+    "dateRange": {
+      "startLabel": "Start date",
+      "endLabel": "End date",
+      "invalidRange": "End date must be after start date.",
+      "last7": "Last 7 Days",
+      "last30": "Last 30 Days",
+      "last3months": "Last 3 Months",
+      "thisYear": "This Year"
+    },
+    "revenue": {
+      "title": "Revenue",
+      "total": "Total Revenue",
+      "count": "Payments",
+      "average": "Average Payment",
+      "empty": "No revenue data for this period.",
+      "allProviders": "All providers",
+      "allServices": "All services",
+      "byProvider": "By Provider",
+      "byService": "By Service",
+      "provider": "Provider",
+      "service": "Service"
+    },
+    "unpaid": {
+      "title": "Unpaid Invoices",
+      "totalAmount": "Total Outstanding",
+      "count": "Unpaid invoices",
+      "partiallyPaid": "Partially paid",
+      "issued": "Issued",
+      "partiallyPaidStatus": "Partially paid",
+      "empty": "All invoices are paid.",
+      "columns": {
+        "invoice": "Invoice #",
+        "patient": "Patient",
+        "provider": "Provider",
+        "total": "Total",
+        "amountPaid": "Amount Paid",
+        "balanceDue": "Balance Due",
+        "daysOutstanding": "Days Outstanding",
+        "status": "Status"
+      }
+    },
+    "planConversion": {
+      "title": "Plan Conversion",
+      "proposed": "Proposed",
+      "accepted": "Accepted",
+      "completed": "Completed",
+      "empty": "No plan data for this period.",
+      "allProviders": "All providers",
+      "monthlyTrend": "Monthly trend",
+      "month": "Month",
+      "conversionRate": "Conversion rate",
+      "providerBreakdown": "Provider breakdown",
+      "provider": "Provider"
+    }
+  },
+  "patients": {
+    "tabs": {
+      "overview": "Overview",
+      "notes": "Notes",
+      "appointments": "Appointments",
+      "plans": "Plans",
+      "billing": "Billing"
+    },
+    "risk": {
+      "low": "Low Risk",
+      "moderate": "Moderate Risk",
+      "high": "High Risk",
+      "tooltip": "No-show count: {count}"
+    },
+    "actions": {
+      "bookAppointment": "Book Appointment",
+      "createPlan": "Create Plan",
+      "createInvoice": "Create Invoice",
+      "newPatient": "New Patient"
+    },
+    "title": "Patients",
+    "subtitle": "Manage patient records and demographics",
+    "addPatient": "Add Patient",
+    "searchPlaceholder": "Search by name, phone, or email...",
+    "firstName": "First name",
+    "lastName": "Last name",
+    "dateOfBirth": "Date of birth",
+    "gender": "Gender",
+    "male": "Male",
+    "female": "Female",
+    "other": "Other",
+    "email": "Email",
+    "phone": "Phone",
+    "phoneSecondary": "Secondary phone",
+    "address": "Address",
+    "preferredLocale": "Preferred language",
+    "active": "Active",
+    "inactive": "Inactive",
+    "createPatient": "Create Patient",
+    "editPatient": "Edit Patient",
+    "patientDetails": "Patient Details",
+    "noPatients": "No patients yet",
+    "noPatientsHint": "Add your first patient to get started",
+    "totalPatients": "Total patients",
+    "activePatients": "Active",
+    "showInactive": "Show inactive",
+    "patientId": "Patient ID",
+    "age": "Age",
+    "yearsOld": "years old",
+    "personalInfo": "Personal information",
+    "contactInfo": "Contact information",
+    "recordInfo": "Record information",
+    "lastUpdated": "Last updated",
+    "createdAt": "Created",
+    "call": "Call",
+    "sendEmail": "Send email",
+    "scheduleAppointment": "Schedule appointment",
+    "overview": "Overview",
+    "noData": "Not provided",
+    "appointments": "Appointments",
+    "recentAppointments": "Recent appointments",
+    "noAppointments": "No appointments yet",
+    "viewAllAppointments": "View all appointments",
+    "notes": "Notes",
+    "patientNotes": "Clinical notes",
+    "addNote": "Add note",
+    "noNotes": "No notes yet",
+    "notePlaceholder": "Add a note about this patient...",
+    "summary": "Summary",
+    "patientSummary": "Patient summary",
+    "totalVisits": "Total visits",
+    "completedVisits": "Completed",
+    "lastVisit": "Last visit",
+    "status": "Status",
+    "provider": "Provider",
+    "services": "Services",
+    "scheduled": "Scheduled",
+    "confirmed": "Confirmed",
+    "completed": "Completed",
+    "canceled": "Canceled",
+    "noShow": "No show"
+  },
+  "scheduling": {
+    "rebook": {
+      "title": "Rebook this patient?",
+      "suggestedDate": "Suggested date",
+      "provider": "Provider",
+      "service": "Service",
+      "planProgress": "Plan progress",
+      "bookNow": "Book Now",
+      "dismiss": "Dismiss"
+    }
+  }
+}
