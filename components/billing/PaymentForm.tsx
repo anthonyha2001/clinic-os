@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { X } from "lucide-react";
+import { useCurrency } from "@/lib/context/CurrencyContext";
 
 interface PaymentMethod {
   id: string;
@@ -24,6 +25,7 @@ interface PaymentFormProps {
 }
 
 export function PaymentForm({ invoice, onClose, onSuccess }: PaymentFormProps) {
+  const { format } = useCurrency();
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [form, setForm] = useState({
     payment_method_id: "",
@@ -120,9 +122,8 @@ export function PaymentForm({ invoice, onClose, onSuccess }: PaymentFormProps) {
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Balance Due</span>
-              <span className="font-bold text-orange-600">
-                $
-                {Number(invoice.balance_due ?? invoice.total).toFixed(2)}
+              <span className="font-bold text-orange-600 dark:text-orange-400">
+                {format(invoice.balance_due ?? invoice.total)}
               </span>
             </div>
           </div>

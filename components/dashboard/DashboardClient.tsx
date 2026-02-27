@@ -196,22 +196,21 @@ export function DashboardClient({ locale }: { locale: string }) {
     day: "numeric",
   });
 
-  if (loading) return <DashboardSkeleton />;
-
-  const confirmed = (data!.todayAppointments as Record<string, unknown>[]).filter(
+  const todayAppointments = data?.todayAppointments ?? [];
+  const confirmed = (todayAppointments as Record<string, unknown>[]).filter(
     (a) => a.status === "confirmed"
   ).length;
-  const scheduled = (data!.todayAppointments as Record<string, unknown>[]).filter(
+  const scheduled = (todayAppointments as Record<string, unknown>[]).filter(
     (a) => a.status === "scheduled"
   ).length;
-  const completed = (data!.todayAppointments as Record<string, unknown>[]).filter(
+  const completed = (todayAppointments as Record<string, unknown>[]).filter(
     (a) => a.status === "completed"
   ).length;
-  const totalUnpaid = (data!.unpaidInvoices as Record<string, unknown>[]).reduce(
+  const totalUnpaid = ((data?.unpaidInvoices ?? []) as Record<string, unknown>[]).reduce(
     (s, i) => s + Number(i.balance_due ?? 0),
     0
   );
-  const criticalPatients = data!.inactivePatients;
+  const criticalPatients = data?.inactivePatients ?? [];
 
   return (
     <div className="space-y-5">
@@ -231,72 +230,76 @@ export function DashboardClient({ locale }: { locale: string }) {
         </div>
       </div>
 
-      <KPIGrid
-        todayTotal={data!.todayAppointments.length}
-        confirmed={confirmed}
-        scheduled={scheduled}
-        completed={completed}
-        totalUnpaid={totalUnpaid}
-        unpaidCount={data!.unpaidInvoices.length}
-        criticalCount={criticalPatients.length}
-        completionRate={data!.completionRate}
-        noShowRate={data!.noShowRate}
-        newPatientsThisMonth={data!.newPatientsThisMonth}
-        locale={locale}
-      />
+      {loading ? (
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="h-20 bg-muted rounded-xl animate-pulse" />
+          ))}
+        </div>
+      ) : (
+        <KPIGrid
+          todayTotal={todayAppointments.length}
+          confirmed={confirmed}
+          scheduled={scheduled}
+          completed={completed}
+          totalUnpaid={totalUnpaid}
+          unpaidCount={(data?.unpaidInvoices ?? []).length}
+          criticalCount={criticalPatients.length}
+          completionRate={data?.completionRate ?? 0}
+          noShowRate={data?.noShowRate ?? 0}
+          newPatientsThisMonth={data?.newPatientsThisMonth ?? 0}
+          locale={locale}
+        />
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2 space-y-5">
-          <TodayTimeline
-            appointments={data!.todayAppointments}
-            providers={data!.providers}
-            locale={locale}
-          />
-          <TodaySchedule
-            appointments={data!.todayAppointments}
-            locale={locale}
-          />
+          {loading ? (
+            <>
+              <div className="h-48 bg-muted rounded-xl animate-pulse" />
+              <div className="h-64 bg-muted rounded-xl animate-pulse" />
+            </>
+          ) : (
+            <>
+              <TodayTimeline
+                appointments={todayAppointments}
+                providers={data?.providers ?? []}
+                locale={locale}
+              />
+              <TodaySchedule
+                appointments={todayAppointments}
+                locale={locale}
+              />
+            </>
+          )}
         </div>
 
         <div className="space-y-5">
-          <ActivityFeed
-            activities={data!.recentActivity}
-            locale={locale}
-          />
-          <UnpaidSummary
-            invoices={data!.unpaidInvoices}
-            locale={locale}
-          />
-          <AtRiskPatients
-            patients={criticalPatients}
-            locale={locale}
-          />
+          {loading ? (
+            <>
+              <div className="h-64 bg-muted rounded-xl animate-pulse" />
+              <div className="h-40 bg-muted rounded-xl animate-pulse" />
+              <div className="h-40 bg-muted rounded-xl animate-pulse" />
+            </>
+          ) : (
+            <>
+              <ActivityFeed
+                activities={data?.recentActivity ?? []}
+                locale={locale}
+              />
+              <UnpaidSummary
+                invoices={data?.unpaidInvoices ?? []}
+                locale={locale}
+              />
+              <AtRiskPatients
+                patients={criticalPatients}
+                locale={locale}
+              />
+            </>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function DashboardSkeleton() {
-  return (
-    <div className="space-y-5 animate-pulse">
-      <div className="h-8 w-56 bg-muted rounded" />
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        {[...Array(5)].map((_, i) => (
-          <div key={i} className="h-20 bg-muted rounded-xl" />
-        ))}
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <div className="lg:col-span-2 space-y-5">
-          <div className="h-48 bg-muted rounded-xl" />
-          <div className="h-64 bg-muted rounded-xl" />
-        </div>
-        <div className="space-y-5">
-          <div className="h-64 bg-muted rounded-xl" />
-          <div className="h-40 bg-muted rounded-xl" />
-          <div className="h-40 bg-muted rounded-xl" />
-        </div>
-      </div>
-    </div>
-  );
-}

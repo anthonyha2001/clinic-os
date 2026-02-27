@@ -128,7 +128,9 @@ export async function POST(
     }, { status: 201 });
 
   } catch (e) {
-    console.error("Booking submit error:", e);
+    if (process.env.NODE_ENV !== "production") {
+      console.error("Booking submit error:", e instanceof Error ? e.message : "Unknown");
+    }
     return NextResponse.json({ error: "Booking failed. Please try again." }, { status: 500 });
   }
 }

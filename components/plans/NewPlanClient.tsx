@@ -1,4 +1,6 @@
 "use client";
+
+import { useCurrency } from "@/lib/context/CurrencyContext";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -45,6 +47,7 @@ export function NewPlanClient({
   locale: string;
 }) {
   const router = useRouter();
+  const { format, symbol } = useCurrency();
   const [services, setServices] = useState<Service[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [patient, setPatient] = useState<Patient | null>(null);
@@ -284,7 +287,7 @@ export function NewPlanClient({
           </label>
           <div className="relative">
             <span className="absolute start-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-              $
+              {symbol}
             </span>
             <input
               type="number"
@@ -378,7 +381,7 @@ export function NewPlanClient({
               </div>
               <div>
                 <label className="block text-xs font-medium mb-1 text-muted-foreground">
-                  Price per session ($)
+                  Price per session
                 </label>
                 <input
                   type="number"
@@ -393,10 +396,9 @@ export function NewPlanClient({
 
             {item.unit_price && item.quantity_total && (
               <p className="text-xs text-muted-foreground text-end">
-                Subtotal: $
-                {(
+                Subtotal: {format(
                   Number(item.unit_price) * Number(item.quantity_total)
-                ).toFixed(2)}
+                )}
               </p>
             )}
           </div>
@@ -411,7 +413,7 @@ export function NewPlanClient({
 
         <div className="flex justify-between text-sm border-t pt-3">
           <span className="text-muted-foreground">Total Plan Value</span>
-          <span className="font-bold">${totalValue.toFixed(2)}</span>
+          <span className="font-bold">{format(totalValue)}</span>
         </div>
       </div>
 

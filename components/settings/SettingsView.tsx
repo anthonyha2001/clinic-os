@@ -20,11 +20,6 @@ type SectionKey = (typeof SECTION_KEYS)[number];
 const SettingsClient = lazy(() =>
   import("./SettingsClient").then((m) => ({ default: m.SettingsClient }))
 );
-const ServicesSettingsPage = lazy(() =>
-  import("@/app/[locale]/(app)/settings/services/page").then((m) => ({
-    default: m.default,
-  }))
-);
 const PaymentsSettingsPage = lazy(() =>
   import("@/app/[locale]/(app)/settings/payments/page").then((m) => ({
     default: m.default,
@@ -120,19 +115,31 @@ export function SettingsView({ locale, initialSection = "services" }: SettingsVi
       </nav>
 
       {/* Content - keep visited tabs mounted (hidden) for instant back-switch */}
-      <div className="min-h-[200px]">
+      <div className="relative min-h-[200px]">
         {SECTION_KEYS.map((key) => {
           if (!visited.has(key)) return null;
           const isActive = activeSection === key;
           return (
             <div
               key={key}
-              hidden={!isActive}
-              className={isActive ? "block" : "hidden"}
+              className="w-full"
+              style={
+                !isActive
+                  ? {
+                      position: "absolute",
+                      visibility: "hidden",
+                      pointerEvents: "none",
+                      top: 0,
+                      left: 0,
+                    }
+                  : undefined
+              }
               aria-hidden={!isActive}
             >
               <Suspense fallback={<TabContentSkeleton />}>
-                {key === "services" && <ServicesSettingsPage />}
+                {key === "services" && (
+                  <SettingsClient locale={locale} defaultTab="Services" />
+                )}
                 {key === "providerTypes" && (
                   <SettingsClient locale={locale} defaultTab="Provider Types" />
                 )}

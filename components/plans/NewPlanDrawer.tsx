@@ -1,4 +1,6 @@
 "use client";
+
+import { useCurrency } from "@/lib/context/CurrencyContext";
 import { useState, useEffect } from "react";
 import { X } from "lucide-react";
 
@@ -34,6 +36,7 @@ export function NewPlanDrawer({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const { format, symbol } = useCurrency();
   const [services, setServices] = useState<Service[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [patientSearch, setPatientSearch] = useState("");
@@ -386,7 +389,7 @@ export function NewPlanDrawer({
                     </div>
                     <div>
                       <label className="text-xs text-muted-foreground">
-                        Price/session ($)
+                        Price/session
                       </label>
                       <input
                         type="number"
@@ -414,7 +417,7 @@ export function NewPlanDrawer({
 
           <div className="flex justify-between text-sm font-semibold border-t pt-3">
             <span>Total Plan Value</span>
-            <span>${totalValue.toFixed(2)}</span>
+            <span>{format(totalValue)}</span>
           </div>
 
           <div>

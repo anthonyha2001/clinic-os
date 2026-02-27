@@ -77,33 +77,9 @@ export function PlanConversionReport({ locale }: { locale: string }) {
     URL.revokeObjectURL(a.href);
   }
 
-  if (loading) {
-    return (
-      <div className="space-y-4 animate-pulse">
-        <div className="grid grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-24 bg-muted rounded-xl" />
-          ))}
-        </div>
-        <div className="h-48 bg-muted rounded-xl" />
-        <div className="h-64 bg-muted rounded-xl" />
-      </div>
-    );
-  }
-
-  if (!data || (data as { error?: string }).error) {
-    return (
-      <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-6 text-center">
-        <p className="font-medium text-destructive">Failed to load plan conversion report</p>
-        <p className="text-sm text-muted-foreground mt-1">
-          You may need permission to view reports, or the server could not load data.
-        </p>
-      </div>
-    );
-  }
-
+  const hasError = !loading && (!data || (data as { error?: string }).error);
   const rows = data?.rows ?? [];
-  const summary = data?.summary;
+  const summary = data?.summary ?? {};
 
   const funnelStages = [
     { label: "Proposed", value: summary?.total_proposed ?? 0, color: "bg-blue-500", pct: 100 },
@@ -143,7 +119,7 @@ export function PlanConversionReport({ locale }: { locale: string }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <ReportDatePicker
           startDate={startDate}
@@ -157,7 +133,8 @@ export function PlanConversionReport({ locale }: { locale: string }) {
               <button
                 key={g}
                 onClick={() => setGroupBy(g)}
-                className={`px-4 py-1.5 text-sm font-medium capitalize transition-colors ${
+                disabled={loading}
+                className={`px-4 py-1.5 text-sm font-medium capitalize transition-colors disabled:opacity-50 ${
                   groupBy === g
                     ? "bg-primary text-primary-foreground"
                     : "hover:bg-muted"
@@ -169,7 +146,8 @@ export function PlanConversionReport({ locale }: { locale: string }) {
           </div>
           <button
             onClick={exportCSV}
-            className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted flex items-center gap-1.5"
+            disabled={loading || rows.length === 0}
+            className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted flex items-center gap-1.5 disabled:opacity-50"
           >
             <Download className="size-3.5 inline-block" />
             Export CSV
@@ -177,6 +155,25 @@ export function PlanConversionReport({ locale }: { locale: string }) {
         </div>
       </div>
 
+      {hasError ? (
+        <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-6 text-center">
+          <p className="font-medium text-destructive">Failed to load plan conversion report</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            You may need permission to view reports, or the server could not load data.
+          </p>
+        </div>
+      ) : loading ? (
+        <div className="space-y-4 animate-pulse">
+          <div className="grid grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-24 bg-muted rounded-xl" />
+            ))}
+          </div>
+          <div className="h-48 bg-muted rounded-xl" />
+          <div className="h-64 bg-muted rounded-xl" />
+        </div>
+      ) : (
+      <>
       {/* KPI cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="rounded-xl border bg-card p-5">
@@ -342,6 +339,8 @@ export function PlanConversionReport({ locale }: { locale: string }) {
           </table>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

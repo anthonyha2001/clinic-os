@@ -1,51 +1,98 @@
 "use client";
 import { useState, useEffect } from "react";
 import { Calendar, Clock, User, Phone, Mail, ChevronRight, ChevronLeft, CheckCircle, Loader2, Stethoscope, MapPin } from "lucide-react";
+import { formatCurrency } from "@/lib/currency";
+import { getAvailableSlots, isClinicOpen, getOffDayForDate } from "@/lib/services/schedule/isClinicOpen";
+import { DEFAULT_WORKING_HOURS } from "@/types/schedule";
+import type { WorkingHours, OffDay } from "@/types/schedule";
 
 type Org = {
   id: string; name: string; slug: string;
   timezone: string; currency: string;
   booking_message: string | null;
   phone: string | null; address: string | null; logo_url: string | null;
+  working_hours?: WorkingHours | null;
+  off_days?: OffDay[] | null;
 };
 type Service = { id: string; name: string; price: number; duration: number };
 type Provider = { id: string; name: string; specialty: string; color_hex: string };
 
 const STEPS = ["Service", "Provider", "Date & Time", "Your Info", "Confirm"];
 
-function generateSlots(busySlots: { start: string; end: string }[], duration: number) {
+const DAY_MAP: Record<number, keyof WorkingHours> = {
+  0: "sunday", 1: "monday", 2: "tuesday", 3: "wednesday",
+  4: "thursday", 5: "friday", 6: "saturday",
+};
+
+function generateSlots(
+  workingHours: WorkingHours | null | undefined,
+  offDays: OffDay[] | null | undefined,
+  date: Date,
+  duration: number,
+  busySlots: { start: string; end: string }[]
+): { time: string; available: boolean }[] {
+  const wh = workingHours ?? DEFAULT_WORKING_HOURS;
+  const existingAppointments = busySlots.map((b) => ({
+    start: new Date(b.start),
+    end: new Date(b.end),
+  }));
+  const available = getAvailableSlots(wh, offDays, date, duration, existingAppointments);
+  const availableSet = new Set(available.map((d) => `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`));
+  const dayKey = DAY_MAP[date.getDay()];
+  const schedule = wh[dayKey];
+  if (!schedule?.open) return [];
+  const [fromH, fromM] = (schedule.from ?? "08:00").split(":").map(Number);
+  const [toH, toM] = (schedule.to ?? "18:00").split(":").map(Number);
   const slots: { time: string; available: boolean }[] = [];
-  for (let h = 8; h < 19; h++) {
-    for (let m = 0; m < 60; m += 30) {
-      const timeStr = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-      const slotStart = new Date(`2000-01-01T${timeStr}:00`);
-      const slotEnd = new Date(slotStart.getTime() + duration * 60000);
-      const endLimit = new Date(`2000-01-01T19:00:00`);
-      if (slotEnd > endLimit) break;
-
-      const isBusy = busySlots.some(b => {
-        const bStart = new Date(b.start);
-        const bEnd = new Date(b.end);
-        const sStart = new Date(`${new Date().toISOString().split("T")[0]}T${timeStr}:00`);
-        const sEnd = new Date(sStart.getTime() + duration * 60000);
-        return sStart < bEnd && sEnd > bStart;
-      });
-
-      slots.push({ time: timeStr, available: !isBusy });
+  for (let m = fromH * 60 + fromM; m + duration <= toH * 60 + toM; m += 30) {
+    const breakFrom = schedule.break_from ? schedule.break_from.split(":").map(Number) : null;
+    const breakTo = schedule.break_to ? schedule.break_to.split(":").map(Number) : null;
+    if (breakFrom && breakTo) {
+      const bStart = breakFrom[0] * 60 + breakFrom[1];
+      const bEnd = breakTo[0] * 60 + breakTo[1];
+      if (m < bEnd && m + duration > bStart) continue;
     }
+    const timeStr = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+    slots.push({ time: timeStr, available: availableSet.has(timeStr) });
   }
   return slots;
 }
 
-function getDates() {
-  const dates = [];
+function getDates(workingHours: WorkingHours | null | undefined, offDays: OffDay[] | null | undefined) {
+  const wh = workingHours ?? DEFAULT_WORKING_HOURS;
+  const od = offDays ?? [];
+  const result: { date: Date; disabled: boolean; reason?: string }[] = [];
   const today = new Date();
-  for (let i = 1; i <= 14; i++) {
+  today.setHours(0, 0, 0, 0);
+  for (let i = 1; i <= 60; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
-    if (d.getDay() !== 0) dates.push(d); // skip Sundays
+    const dayKey = DAY_MAP[d.getDay()];
+    const schedule = wh[dayKey];
+    const off = od.find((o) => {
+      const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      if (o.date === dStr) return true;
+      if (o.recurring) {
+        const [, m, day] = o.date.split("-");
+        return m === String(d.getMonth() + 1).padStart(2, "0") && day === String(d.getDate()).padStart(2, "0");
+      }
+      return false;
+    });
+    if (off) {
+      result.push({ date: d, disabled: true, reason: off.label });
+    } else if (!schedule?.open) {
+      result.push({ date: d, disabled: true, reason: "Closed" });
+    } else {
+      result.push({ date: d, disabled: false });
+    }
   }
-  return dates;
+  return result;
+}
+
+function getNextAvailableDate(workingHours: WorkingHours | null | undefined, offDays: OffDay[] | null | undefined): Date | null {
+  const dates = getDates(workingHours, offDays);
+  const next = dates.find((d) => !d.disabled);
+  return next?.date ?? null;
 }
 
 export function PublicBookingClient({ org }: { org: Org }) {
@@ -65,8 +112,23 @@ export function PublicBookingClient({ org }: { org: Org }) {
   const [confirmedTime, setConfirmedTime] = useState<string>("");
 
   useEffect(() => {
-    fetch(`/api/book/${org.slug}/services`).then(r => r.json()).then(setServices);
-    fetch(`/api/book/${org.slug}/providers`).then(r => r.json()).then(setProviders);
+    const load = async () => {
+      try {
+        const [sRes, pRes] = await Promise.all([
+          fetch(`/api/book/${org.slug}/services`),
+          fetch(`/api/book/${org.slug}/providers`),
+        ]);
+        const sData = await sRes.json();
+        const pData = await pRes.json();
+        if (Array.isArray(sData)) setServices(sData);
+        else if (Array.isArray(sData?.services)) setServices(sData.services);
+        if (Array.isArray(pData)) setProviders(pData);
+        else if (Array.isArray(pData?.providers)) setProviders(pData.providers);
+      } catch {
+        setError("Failed to load services and providers");
+      }
+    };
+    load();
   }, [org.slug]);
 
   useEffect(() => {
@@ -76,10 +138,11 @@ export function PublicBookingClient({ org }: { org: Org }) {
     fetch(`/api/book/${org.slug}/availability?date=${dateStr}&provider_id=${selectedProvider.id}`)
       .then(r => r.json())
       .then(data => {
-        setSlots(generateSlots(data.busy ?? [], selectedService.duration));
-        setSlotsLoading(false);
-      });
-  }, [selectedDate, selectedProvider, selectedService, org.slug]);
+        setSlots(generateSlots(org.working_hours, org.off_days, selectedDate, selectedService.duration, data.busy ?? []));
+      })
+      .catch(() => setSlots([]))
+      .finally(() => setSlotsLoading(false));
+  }, [selectedDate, selectedProvider, selectedService, org.slug, org.working_hours, org.off_days]);
 
   async function handleSubmit() {
     if (!form.name || !form.phone) { setError("Name and phone are required"); return; }
@@ -210,7 +273,7 @@ export function PublicBookingClient({ org }: { org: Org }) {
                 className="w-full rounded-2xl border-2 bg-white hover:border-blue-400 hover:shadow-md transition-all p-4 text-start flex items-center justify-between group">
                 <div>
                   <p className="font-semibold text-gray-900">{s.name}</p>
-                  <p className="text-sm text-gray-400 mt-0.5">{s.duration} min · ${Number(s.price).toFixed(2)}</p>
+                  <p className="text-sm text-gray-400 mt-0.5">{s.duration} min · {formatCurrency(s.price ?? 0, org.currency)}</p>
                 </div>
                 <ChevronRight className="size-5 text-gray-300 group-hover:text-blue-500" />
               </button>
@@ -249,11 +312,19 @@ export function PublicBookingClient({ org }: { org: Org }) {
             <h2 className="text-xl font-bold text-gray-900 mb-4">Pick a Date & Time</h2>
             {/* Date picker */}
             <div className="flex gap-2 overflow-x-auto pb-2 mb-5">
-              {getDates().map(d => {
+              {getDates(org.working_hours, org.off_days).map(({ date: d, disabled, reason }) => {
                 const isSelected = selectedDate?.toDateString() === d.toDateString();
                 return (
-                  <button key={d.toISOString()} onClick={() => { setSelectedDate(d); setSelectedTime(null); }}
-                    className={`shrink-0 rounded-2xl border-2 p-3 text-center w-16 transition-all ${isSelected ? "border-blue-600 bg-blue-600 text-white" : "border-gray-200 bg-white hover:border-blue-300"}`}>
+                  <button
+                    key={d.toISOString()}
+                    onClick={() => { if (!disabled) { setSelectedDate(d); setSelectedTime(null); } }}
+                    disabled={disabled}
+                    title={disabled ? reason : undefined}
+                    className={`shrink-0 rounded-2xl border-2 p-3 text-center w-16 transition-all ${
+                      disabled ? "border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed opacity-60" :
+                      isSelected ? "border-blue-600 bg-blue-600 text-white" : "border-gray-200 bg-white hover:border-blue-300"
+                    }`}
+                  >
                     <p className="text-xs font-medium">{d.toLocaleDateString("en", { weekday: "short" })}</p>
                     <p className="text-xl font-bold mt-0.5">{d.getDate()}</p>
                     <p className="text-xs">{d.toLocaleDateString("en", { month: "short" })}</p>
@@ -263,31 +334,49 @@ export function PublicBookingClient({ org }: { org: Org }) {
             </div>
 
             {/* Time slots */}
-            {selectedDate && (
-              <div>
-                <p className="text-sm font-medium text-gray-500 mb-3">Available times</p>
-                {slotsLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="size-6 animate-spin text-blue-500" />
+            {selectedDate && (() => {
+              const openResult = isClinicOpen(org.working_hours, org.off_days, selectedDate);
+              const offDay = getOffDayForDate(org.off_days, selectedDate);
+              const nextAvail = getNextAvailableDate(org.working_hours, org.off_days);
+              if (!openResult.open) {
+                return (
+                  <div className="rounded-2xl bg-gray-50 border border-gray-200 p-6 text-center">
+                    <p className="text-gray-700 font-medium">We&apos;re closed on this day</p>
+                    {offDay && <p className="text-sm text-gray-500 mt-1">{offDay.label}</p>}
+                    {nextAvail && (
+                      <p className="text-sm text-blue-600 mt-3">
+                        Next available date: {nextAvail.toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric" })}
+                      </p>
+                    )}
                   </div>
-                ) : (
-                  <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                    {slots.map(slot => (
-                      <button key={slot.time}
-                        disabled={!slot.available}
-                        onClick={() => setSelectedTime(slot.time)}
-                        className={`rounded-xl py-2.5 text-sm font-medium border-2 transition-all ${
-                          !slot.available ? "bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed line-through" :
-                          selectedTime === slot.time ? "bg-blue-600 text-white border-blue-600" :
-                          "bg-white text-gray-700 border-gray-200 hover:border-blue-400"
-                        }`}>
-                        {slot.time}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+                );
+              }
+              return (
+                <div>
+                  <p className="text-sm font-medium text-gray-500 mb-3">Available times</p>
+                  {slotsLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="size-6 animate-spin text-blue-500" />
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                      {slots.map(slot => (
+                        <button key={slot.time}
+                          disabled={!slot.available}
+                          onClick={() => setSelectedTime(slot.time)}
+                          className={`rounded-xl py-2.5 text-sm font-medium border-2 transition-all ${
+                            !slot.available ? "bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed line-through" :
+                            selectedTime === slot.time ? "bg-blue-600 text-white border-blue-600" :
+                            "bg-white text-gray-700 border-gray-200 hover:border-blue-400"
+                          }`}>
+                          {slot.time}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             <div className="flex gap-3 mt-6">
               <button onClick={() => setStep(1)} className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600">
@@ -377,7 +466,7 @@ export function PublicBookingClient({ org }: { org: Org }) {
               ))}
               <div className="pt-2 border-t flex items-center justify-between">
                 <span className="text-sm text-gray-500">Appointment Fee</span>
-                <span className="font-bold text-lg">${Number(selectedService?.price ?? 0).toFixed(2)}</span>
+                <span className="font-bold text-lg">{formatCurrency(selectedService?.price ?? 0, org.currency)}</span>
               </div>
             </div>
             {error && <div className="rounded-2xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 mt-4">{error}</div>}

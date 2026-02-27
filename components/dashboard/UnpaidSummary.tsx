@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { CheckCircle, ArrowRight } from "lucide-react";
+import { useCurrency } from "@/lib/context/CurrencyContext";
 
 type Invoice = Record<string, unknown>;
 
@@ -12,6 +13,7 @@ export function UnpaidSummary({
   locale: string;
 }) {
   const router = useRouter();
+  const { format } = useCurrency();
   const total = invoices.reduce(
     (s, i) => s + Number(i.balance_due ?? 0),
     0
@@ -28,9 +30,8 @@ export function UnpaidSummary({
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-semibold">Outstanding Invoices</h2>
         {total > 0 && (
-          <span className="text-xs font-bold text-orange-600">
-            $
-            {total.toLocaleString("en", { minimumFractionDigits: 0 })}
+          <span className="text-xs font-bold text-orange-600 dark:text-orange-400">
+            {format(total)}
           </span>
         )}
       </div>
@@ -67,7 +68,7 @@ export function UnpaidSummary({
                 </div>
                 <div className="text-end shrink-0">
                   <p className="text-xs font-bold">
-                    ${Number(inv.balance_due ?? 0).toFixed(0)}
+                    {format(Number(inv.balance_due ?? 0))}
                   </p>
                   <p
                     className={`text-xs ${

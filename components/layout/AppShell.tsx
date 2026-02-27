@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
+import { CurrencyProvider } from "@/lib/context/CurrencyContext";
+import { NavigationProgress } from "@/components/ui/NavigationProgress";
 import type { AuthUser } from "@/lib/auth/getCurrentUser";
 
 interface AppShellProps {
@@ -16,6 +18,8 @@ export function AppShell({ user, permissions, locale, children }: AppShellProps)
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
+    <CurrencyProvider>
+    <NavigationProgress />
     <div className="min-h-screen w-full bg-background">
       {/* Sidebar — fixed left, full height */}
       <Sidebar
@@ -41,5 +45,6 @@ export function AppShell({ user, permissions, locale, children }: AppShellProps)
         </main>
       </div>
     </div>
+    </CurrencyProvider>
   );
 }

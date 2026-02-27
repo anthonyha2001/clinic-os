@@ -1,4 +1,6 @@
 "use client";
+
+import { useCurrency } from "@/lib/context/CurrencyContext";
 import { useState, useEffect, useCallback } from "react";
 import { Download, User, Stethoscope } from "lucide-react";
 import { PlanDetailDrawer } from "./PlanDetailDrawer";
@@ -18,6 +20,7 @@ type Plan = Record<string, unknown>;
 type Provider = { id: string; user?: { full_name?: string }; full_name?: string };
 
 export function PlansClient({ locale }: { locale: string }) {
+  const { format } = useCurrency();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
@@ -110,7 +113,7 @@ export function PlansClient({ locale }: { locale: string }) {
         plan.completed_sessions ?? 0,
         plan.total_sessions ?? 0,
         plan.total_estimated_cost
-          ? `$${Number(plan.total_estimated_cost).toFixed(2)}`
+          ? format(Number(plan.total_estimated_cost))
           : "—",
         new Date(
           (plan.proposed_at ?? plan.created_at) as string
@@ -361,7 +364,7 @@ export function PlansClient({ locale }: { locale: string }) {
                   <div className="text-end shrink-0 space-y-1">
                     {plan.total_estimated_cost != null && (
                       <p className="font-semibold">
-                        ${Number(plan.total_estimated_cost).toFixed(2)}
+                        {format(Number(plan.total_estimated_cost))}
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground">

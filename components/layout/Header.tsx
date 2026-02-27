@@ -2,9 +2,11 @@
 
 import { usePathname } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
+import { useTheme } from "next-themes";
 import { MenuIcon } from "./icons";
 import { LocaleSwitcher } from "./LocaleSwitcher";
 import { UserMenu } from "./UserMenu";
+import { Sun, Moon } from "lucide-react";
 
 const PATH_KEYS: Record<string, string> = {
   "/": "dashboard",
@@ -37,8 +39,10 @@ interface HeaderProps {
 export function Header({ user, locale, title, onMenuClick }: HeaderProps) {
   const pathname = usePathname();
   const t = useTranslations("nav");
+  const { theme, setTheme, resolvedTheme } = useTheme();
   const isRtl = locale === "ar";
   const pageTitle = title ?? t(getPageTitleKey(pathname));
+  const isDark = resolvedTheme === "dark";
 
   return (
     <header
@@ -59,8 +63,16 @@ export function Header({ user, locale, title, onMenuClick }: HeaderProps) {
         {pageTitle}
       </h1>
 
-      {/* Right (LTR) / Left (RTL): LocaleSwitcher + UserMenu */}
+      {/* Right (LTR) / Left (RTL): Theme toggle + LocaleSwitcher + UserMenu */}
       <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setTheme(isDark ? "light" : "dark")}
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+        </button>
         <LocaleSwitcher />
         <UserMenu user={user} locale={locale} />
       </div>

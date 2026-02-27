@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Download, Plus, Printer } from "lucide-react";
+import { useCurrency } from "@/lib/context/CurrencyContext";
 import { QuickPayDrawer } from "./QuickPayDrawer";
 import { InvoicePrintPreview } from "./InvoicePrintPreview";
 
@@ -43,6 +44,7 @@ export function BillingClient({
   hideFinancialSummary?: boolean;
 }) {
   const router = useRouter();
+  const { format } = useCurrency();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [providers, setProviders] = useState<Record<string, unknown>[]>([]);
   const [summary, setSummary] = useState({
@@ -151,8 +153,8 @@ export function BillingClient({
         inv.invoice_number,
         `${inv.patient?.first_name ?? ""} ${inv.patient?.last_name ?? ""}`.trim(),
         new Date(inv.created_at).toLocaleDateString(),
-        `$${Number(inv.total).toFixed(2)}`,
-        `$${Number(inv.balance_due).toFixed(2)}`,
+        format(inv.total),
+        format(inv.balance_due),
         inv.status,
       ]);
 
@@ -196,10 +198,7 @@ export function BillingClient({
             <p className="text-sm text-muted-foreground mt-0.5">
               {summary.totalUnpaidCount} unpaid ·{" "}
               <span className="text-orange-600 font-medium">
-                $
-                {Number(summary.totalUnpaidAmount).toLocaleString("en", {
-                  minimumFractionDigits: 2,
-                })}
+                {format(summary.totalUnpaidAmount)}
               </span>{" "}
               outstanding
             </p>
@@ -252,7 +251,7 @@ export function BillingClient({
               </span>
               {amount != null && amount > 0 && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  ${Number(amount).toLocaleString()}
+                  {format(amount)}
                 </p>
               )}
             </button>
@@ -462,12 +461,12 @@ export function BillingClient({
                       })}
                     </td>
                     <td className="px-4 py-3 text-end">
-                      ${Number(inv.total).toFixed(2)}
+                      {format(inv.total)}
                     </td>
                     <td
                       className={`px-4 py-3 text-end font-semibold ${Number(inv.balance_due) > 0 ? "text-orange-600" : "text-green-600"}`}
                     >
-                      ${Number(inv.balance_due).toFixed(2)}
+                      {format(inv.balance_due)}
                     </td>
                     <td className="px-4 py-3">
                       <span
@@ -513,19 +512,13 @@ export function BillingClient({
               <span>
                 Total:{" "}
                 <span className="font-semibold">
-                  $
-                  {filtered
-                    .reduce((s, i) => s + Number(i.total), 0)
-                    .toLocaleString("en", { minimumFractionDigits: 2 })}
+                  {format(filtered.reduce((s, i) => s + Number(i.total), 0))}
                 </span>
               </span>
               <span>
                 Outstanding:{" "}
                 <span className="font-semibold text-orange-600">
-                  $
-                  {filtered
-                    .reduce((s, i) => s + Number(i.balance_due), 0)
-                    .toLocaleString("en", { minimumFractionDigits: 2 })}
+                  {format(filtered.reduce((s, i) => s + Number(i.balance_due), 0))}
                 </span>
               </span>
             </div>

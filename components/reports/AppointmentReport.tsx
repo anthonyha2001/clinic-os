@@ -85,17 +85,7 @@ export function AppointmentReport({ locale }: { locale: string }) {
 
   const summary = (data?.summary as Record<string, unknown>) ?? {};
   const prevSummary = (prevData?.summary as Record<string, unknown>) ?? {};
-
-  if (!data) {
-    return (
-      <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-6 text-center">
-        <p className="font-medium text-destructive">Failed to load appointments report</p>
-        <p className="text-sm text-muted-foreground mt-1">
-          You may need permission to view reports, or the server could not load data.
-        </p>
-      </div>
-    );
-  }
+  const hasError = !loading && (!data || (data as { error?: string }).error);
 
   const total = Number(summary.total ?? 0);
   const prevTotal = Number(prevSummary.total ?? 0);
@@ -123,8 +113,6 @@ export function AppointmentReport({ locale }: { locale: string }) {
     no_show: "#f97316",
   };
 
-  if (loading) return <ReportSkeleton />;
-
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -143,6 +131,17 @@ export function AppointmentReport({ locale }: { locale: string }) {
         </button>
       </div>
 
+      {hasError ? (
+        <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-6 text-center">
+          <p className="font-medium text-destructive">Failed to load appointments report</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            You may need permission to view reports, or the server could not load data.
+          </p>
+        </div>
+      ) : loading ? (
+        <ReportSkeleton />
+      ) : (
+      <>
       <KPICards
         cards={[
           {
@@ -285,6 +284,8 @@ export function AppointmentReport({ locale }: { locale: string }) {
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

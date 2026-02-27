@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { ChevronUp, ChevronDown } from "lucide-react";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 type PaymentMethod = {
   id: string;
@@ -79,15 +80,26 @@ export default function PaymentsSettingsPage() {
     updateMethod(arr[idx + 1].id, { displayOrder: idx + 1 });
   };
 
-  if (loading) return <div className="text-muted-foreground">{t("loading")}</div>;
-
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
         Toggle active and reorder payment methods. Labels are editable.
       </p>
       <div className="space-y-2">
-        {(Array.isArray(methods) ? methods : []).map((m, idx) => (
+        {loading ? (
+          [...Array(3)].map((_, i) => (
+            <div key={i} className="flex items-center gap-4 rounded-lg border border-border p-4">
+              <Skeleton className="h-16 w-8" />
+              <div className="flex-1 grid grid-cols-3 gap-2">
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-9 w-full" />
+              </div>
+              <Skeleton className="h-9 w-20 rounded" />
+            </div>
+          ))
+        ) : (
+        (Array.isArray(methods) ? methods : []).map((m, idx) => (
           <div
             key={m.id}
             className="flex items-center gap-4 rounded-lg border border-border p-4"
@@ -178,9 +190,10 @@ export default function PaymentsSettingsPage() {
               {m.isActive ? "Active" : "Inactive"}
             </button>
           </div>
-        ))}
+        ))
+        )}
       </div>
-      {methods.length === 0 && (
+      {!loading && methods.length === 0 && (
         <p className="py-8 text-center text-muted-foreground">
           No payment methods. Run bootstrap to create default methods.
         </p>

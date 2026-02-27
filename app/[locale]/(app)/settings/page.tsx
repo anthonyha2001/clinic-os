@@ -1,4 +1,4 @@
-import { SettingsClient } from "@/components/settings/SettingsClient";
+import { SettingsView } from "@/components/settings/SettingsView";
 
 export default async function SettingsPage({
   params,
@@ -6,5 +6,5 @@ export default async function SettingsPage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  return <SettingsClient locale={locale} />;
+  return <SettingsView locale={locale} />;
 }

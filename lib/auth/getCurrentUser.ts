@@ -1,4 +1,5 @@
 import { cookies, headers } from "next/headers";
+import { cache } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { pgClient } from "@/db/index";
 
@@ -15,6 +16,7 @@ export interface AuthUser {
 }
 
 const authCache = new Map<string, { user: AuthUser; expires: number }>();
+const AUTH_CACHE_TTL_MS = 10 * 60 * 1000;
 
 function getCachedUser(token: string): AuthUser | null {
   const cached = authCache.get(token);
@@ -27,7 +29,7 @@ function getCachedUser(token: string): AuthUser | null {
 }
 
 function setCachedUser(token: string, user: AuthUser) {
-  authCache.set(token, { user, expires: Date.now() + 30_000 });
+  authCache.set(token, { user, expires: Date.now() + AUTH_CACHE_TTL_MS });
   if (authCache.size > 500) {
     const now = Date.now();
     for (const [k, v] of authCache.entries()) {
@@ -101,6 +103,69 @@ async function getTestUser(userId: string): Promise<AuthUser | null> {
   };
 }
 
+function readString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+/**
+ * Lightweight session read (no DB queries).
+ * Used by layout after middleware has already gated unauthenticated requests.
+ */
+export async function getCurrentSessionUser(): Promise<AuthUser | null> {
+  try {
+    if (process.env.TEST_AUTH_BYPASS === "true") {
+      const headersList = await headers();
+      const testUserId = headersList.get("x-test-user-id");
+      if (testUserId) {
+        return getTestUser(testUserId);
+      }
+    }
+
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
+
+    if (!authUser) return null;
+
+    const userMeta = (authUser.user_metadata ?? {}) as Record<string, unknown>;
+    const appMeta = (authUser.app_metadata ?? {}) as Record<string, unknown>;
+
+    return {
+      id: authUser.id,
+      email: authUser.email ?? "",
+      fullName:
+        readString(userMeta.full_name) ||
+        readString(userMeta.name) ||
+        readString(authUser.email, "User"),
+      phone: readString(userMeta.phone) || null,
+      preferredLocale: readString(userMeta.preferred_locale, "en"),
+      isActive: true,
+      organizationId:
+        readString(userMeta.organization_id) ||
+        readString(appMeta.organization_id),
+      roles: readStringArray(appMeta.roles).length
+        ? readStringArray(appMeta.roles)
+        : readStringArray(userMeta.roles),
+      permissions: readStringArray(appMeta.permissions).length
+        ? readStringArray(appMeta.permissions)
+        : readStringArray(userMeta.permissions),
+    };
+  } catch (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error(
+        "getCurrentSessionUser error:",
+        error instanceof Error ? error.message : "Unknown"
+      );
+    }
+    return null;
+  }
+}
+
 export async function getCurrentUser(): Promise<AuthUser | null> {
   try {
     // Test bypass: when TEST_AUTH_BYPASS=true, use X-Test-User-Id header to authenticate
@@ -170,10 +235,15 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     setCachedUser(token, authUserResult);
     return authUserResult;
   } catch (error) {
-    console.error("getCurrentUser error:", error);
+    if (process.env.NODE_ENV !== "production") {
+      console.error("getCurrentUser error:", error instanceof Error ? error.message : "Unknown");
+    }
     return null;
   }
 }
+
+// Request-scoped dedupe for RSC tree (layout + nested pages).
+export const getCurrentUserCached = cache(getCurrentUser);
 
 /**
  * For layout: returns user or redirect info.
@@ -185,7 +255,7 @@ export async function getUserOrRedirectInfo(): Promise<
   | { redirectTo: "/auth/login" }
   | { redirectTo: "/auth/error"; code: "userNotFound" }
 > {
-  const user = await getCurrentUser();
+  const user = await getCurrentUserCached();
   if (user) return { user };
 
   if (process.env.TEST_AUTH_BYPASS === "true") {

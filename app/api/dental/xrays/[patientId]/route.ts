@@ -15,7 +15,22 @@ export const GET = withAuth(async (request, { user, params }) => {
 
 export const POST = withAuth(async (request, { user, params }) => {
   const patientId = params?.patientId as string;
+  if (!patientId) {
+    return NextResponse.json({ error: "Patient ID required" }, { status: 422 });
+  }
+  const [patient] = await pgClient`
+    SELECT id FROM patients
+    WHERE id = ${patientId} AND organization_id = ${user.organizationId}
+    LIMIT 1
+  `;
+  if (!patient) {
+    return NextResponse.json({ error: "Patient not found" }, { status: 404 });
+  }
   const body = await request.json();
+  const fileUrl = typeof body.file_url === "string" ? body.file_url.trim() : null;
+  if (!fileUrl) {
+    return NextResponse.json({ error: "file_url required" }, { status: 422 });
+  }
   const [row] = await pgClient`
     INSERT INTO dental_xrays (
       organization_id, patient_id, tooth_number, xray_type,
@@ -23,7 +38,7 @@ export const POST = withAuth(async (request, { user, params }) => {
     ) VALUES (
       ${user.organizationId}, ${patientId},
       ${body.tooth_number ?? null}, ${body.xray_type ?? "periapical"},
-      ${body.file_url}, ${body.file_name},
+      ${fileUrl}, ${body.file_name ?? null},
       ${body.notes ?? null}, ${body.taken_at ?? new Date().toISOString().split("T")[0]},
       ${user.id}
     )

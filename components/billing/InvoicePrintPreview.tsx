@@ -1,5 +1,7 @@
 "use client";
 
+import { useCurrency } from "@/lib/context/CurrencyContext";
+
 import { useState, useEffect, useRef } from "react";
 import { Printer, X, Check } from "lucide-react";
 
@@ -43,6 +45,7 @@ export function InvoicePrintPreview({
   invoiceId: string;
   onClose: () => void;
 }) {
+  const { format } = useCurrency();
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const printRef = useRef<HTMLDivElement>(null);
@@ -246,10 +249,10 @@ export function InvoicePrintPreview({
                           {line.quantity}
                         </td>
                         <td className="py-3 text-end text-gray-500">
-                          ${Number(line.unit_price).toFixed(2)}
+                          {format(line.unit_price)}
                         </td>
                         <td className="py-3 text-end font-medium">
-                          ${Number(line.line_total).toFixed(2)}
+                          {format(line.line_total)}
                         </td>
                       </tr>
                     ))}
@@ -261,7 +264,7 @@ export function InvoicePrintPreview({
                 <div className="w-64 space-y-1 text-sm totals">
                   <div className="flex justify-between">
                     <span className="text-gray-500">Subtotal</span>
-                    <span>${Number(subtotal).toFixed(2)}</span>
+                    <span>{format(subtotal)}</span>
                   </div>
                   {Number(invoice.discount_amount) > 0 && (
                     <div className="flex justify-between text-green-600">
@@ -269,19 +272,19 @@ export function InvoicePrintPreview({
                         Discount ({invoice.discount_percent}%)
                       </span>
                       <span>
-                        -${Number(invoice.discount_amount).toFixed(2)}
+                        -{format(invoice.discount_amount)}
                       </span>
                     </div>
                   )}
                   <div className="flex justify-between font-bold text-base pt-2 border-t border-gray-200 total-row">
                     <span>Total</span>
-                    <span>${Number(invoice.total).toFixed(2)}</span>
+                    <span>{format(invoice.total)}</span>
                   </div>
                   {Number(invoice.balance_due) > 0 && (
                     <div className="flex justify-between font-bold text-orange-600 balance">
                       <span>Balance Due</span>
                       <span>
-                        ${Number(invoice.balance_due).toFixed(2)}
+                        {format(invoice.balance_due)}
                       </span>
                     </div>
                   )}
@@ -328,7 +331,7 @@ export function InvoicePrintPreview({
                               "—"}
                           </td>
                           <td className="py-2 text-end font-medium">
-                            ${Number(p.amount).toFixed(2)}
+                            {format(p.amount)}
                           </td>
                         </tr>
                       ))}

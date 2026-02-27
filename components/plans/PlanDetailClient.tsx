@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useCurrency } from "@/lib/context/CurrencyContext";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, ArrowRight, Calendar, FileText, Loader2, CheckCircle } from "lucide-react";
 import { SessionSchedulePopup } from "@/components/scheduling/SessionSchedulePopup";
@@ -64,6 +65,7 @@ interface Plan {
 
 export function PlanDetailClient({ planId, locale }: { planId: string; locale: string }) {
   const router = useRouter();
+  const { format, symbol } = useCurrency();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -296,7 +298,7 @@ export function PlanDetailClient({ planId, locale }: { planId: string; locale: s
             <div>
               <p className="text-muted-foreground">Est. Cost</p>
               <p className="font-semibold">
-                ${Number(plan.total_estimated_cost).toFixed(2)}
+                {format(plan.total_estimated_cost)}
               </p>
             </div>
           )}
@@ -358,8 +360,7 @@ export function PlanDetailClient({ planId, locale }: { planId: string; locale: s
                           {item.description_en || item.service?.name_en}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          {done} / {total} sessions · $
-                          {Number(item.unit_price).toFixed(2)}/session
+                          {done} / {total} sessions · {format(item.unit_price)}/session
                         </p>
 
                         {scheduledAppt && (
@@ -416,7 +417,7 @@ export function PlanDetailClient({ planId, locale }: { planId: string; locale: s
                     </div>
                     <div className="text-end shrink-0 space-y-1">
                       <p className="font-semibold">
-                        ${Number(item.unit_price).toFixed(2)}
+                        {format(item.unit_price)}
                       </p>
                       <p className="text-xs text-muted-foreground">per session</p>
                       {canSchedule && (
@@ -451,14 +452,13 @@ export function PlanDetailClient({ planId, locale }: { planId: string; locale: s
           <div className="px-6 py-4 border-t bg-muted/50 flex justify-between text-sm">
             <span className="font-medium">Total Plan Value</span>
             <span className="font-bold">
-              $
-              {items
-                .reduce(
+              {format(
+                items.reduce(
                   (sum, item) =>
                     sum + Number(item.unit_price) * item.quantity_total,
                   0
                 )
-                .toFixed(2)}
+              )}
             </span>
           </div>
         )}

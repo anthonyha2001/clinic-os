@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "@/i18n/navigation";
 import { ArrowLeft, X } from "lucide-react";
+import { useCurrency } from "@/lib/context/CurrencyContext";
 
 interface Service {
   id: string;
@@ -46,6 +47,7 @@ export function NewInvoiceClient({
   onSuccess?: () => void;
 }) {
   const router = useRouter();
+  const { format } = useCurrency();
   const [services, setServices] = useState<Service[]>([]);
   const [patientSearch, setPatientSearch] = useState("");
   const [patients, setPatients] = useState<PatientOption[]>([]);
@@ -364,7 +366,7 @@ export function NewInvoiceClient({
           <div className="text-end text-sm">
             <div className="flex justify-between gap-8">
               <span className="text-muted-foreground">Subtotal</span>
-              <span className="font-semibold">${subtotal.toFixed(2)}</span>
+              <span className="font-semibold">{format(subtotal)}</span>
             </div>
           </div>
         </div>

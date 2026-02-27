@@ -1,8 +1,6 @@
 import { redirect } from "@/i18n/navigation";
-
-export const revalidate = 60;
 import type { Locale } from "@/i18n/config";
-import { getUserOrRedirectInfo } from "@/lib/auth/getCurrentUser";
+import { getCurrentUserCached } from "@/lib/auth/getCurrentUser";
 import { AppShell } from "@/components/layout/AppShell";
 
 interface AuthenticatedLayoutProps {
@@ -15,22 +13,15 @@ export default async function AuthenticatedLayout({
   params,
 }: AuthenticatedLayoutProps) {
   const { locale } = await params;
-  const result = await getUserOrRedirectInfo();
+  const user = await getCurrentUserCached();
 
-  if ("user" in result) {
-    return (
-      <AppShell user={result.user} permissions={result.user.permissions} locale={locale}>
-        {children}
-      </AppShell>
-    );
+  if (!user) {
+    return redirect({ href: "/auth/login", locale: locale as Locale });
   }
 
-  if (result.redirectTo === "/auth/error" && result.code) {
-    return redirect({
-      href: `/auth/error?code=${result.code}`,
-      locale: locale as Locale,
-    });
-  }
-
-  return redirect({ href: "/auth/login", locale: locale as Locale });
+  return (
+    <AppShell user={user} permissions={user.permissions} locale={locale}>
+      {children}
+    </AppShell>
+  );
 }

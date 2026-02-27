@@ -334,26 +334,7 @@ export function PatientDetailClient({
     return Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000));
   }
 
-  if (loading) {
-    return (
-      <div className="space-y-4 animate-pulse">
-        <div className="h-8 w-48 bg-muted rounded" />
-        <div className="h-40 bg-muted rounded-xl" />
-        <div className="h-12 bg-muted rounded-xl" />
-        <div className="h-64 bg-muted rounded-xl" />
-      </div>
-    );
-  }
-
-  if (!patient) {
-    return (
-      <div className="text-center py-20 text-muted-foreground">
-        Patient not found.
-      </div>
-    );
-  }
-
-  const initials = `${patient.first_name[0] ?? ""}${patient.last_name[0] ?? ""}`.toUpperCase();
+  const initials = patient ? `${patient.first_name[0] ?? ""}${patient.last_name[0] ?? ""}`.toUpperCase() : "";
 
   return (
     <div className="space-y-4 max-w-5xl">
@@ -365,6 +346,18 @@ export function PatientDetailClient({
         Back to Patients
       </button>
 
+      {!loading && !patient ? (
+        <div className="text-center py-20 text-muted-foreground rounded-xl border bg-card">
+          Patient not found.
+        </div>
+      ) : loading ? (
+        <div className="space-y-4 animate-pulse">
+          <div className="h-40 bg-muted rounded-xl" />
+          <div className="h-12 bg-muted rounded-xl" />
+          <div className="h-64 bg-muted rounded-xl" />
+        </div>
+      ) : (
+      <>
       <div className="rounded-xl border bg-card p-5">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-4">
@@ -966,6 +959,8 @@ export function PatientDetailClient({
             </div>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );

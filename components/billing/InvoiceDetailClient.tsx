@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "@/i18n/navigation";
 import { ArrowLeft } from "lucide-react";
+import { useCurrency } from "@/lib/context/CurrencyContext";
 import { PaymentForm } from "./PaymentForm";
 import { DiscountForm } from "./DiscountForm";
 
@@ -55,6 +56,7 @@ export function InvoiceDetailClient({
   locale,
 }: InvoiceDetailClientProps) {
   const router = useRouter();
+  const { format } = useCurrency();
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
@@ -185,10 +187,10 @@ export function InvoiceDetailClient({
                 <td className="px-4 py-3">{line.description_en}</td>
                 <td className="px-4 py-3 text-end">{line.quantity}</td>
                 <td className="px-4 py-3 text-end">
-                  ${Number(line.unit_price).toFixed(2)}
+                  {format(line.unit_price)}
                 </td>
                 <td className="px-4 py-3 text-end font-medium">
-                  ${Number(line.line_total).toFixed(2)}
+                  {format(line.line_total)}
                 </td>
               </tr>
             ))}
@@ -199,26 +201,26 @@ export function InvoiceDetailClient({
         <div className="space-y-2 border-t px-6 py-4">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Subtotal</span>
-            <span>${Number(invoice.subtotal).toFixed(2)}</span>
+            <span>{format(invoice.subtotal)}</span>
           </div>
           {Number(invoice.discount_amount ?? 0) > 0 && (
-            <div className="flex justify-between text-sm text-green-600">
+            <div className="flex justify-between text-sm text-green-600 dark:text-green-400">
               <span>
                 Discount ({invoice.discount_percent ?? 0}%)
               </span>
               <span>
-                -${Number(invoice.discount_amount).toFixed(2)}
+                -{format(invoice.discount_amount)}
               </span>
             </div>
           )}
           <div className="flex justify-between border-t pt-2 text-base font-semibold">
             <span>Total</span>
-            <span>${Number(invoice.total).toFixed(2)}</span>
+            <span>{format(invoice.total)}</span>
           </div>
           {balanceDue > 0 && (
-            <div className="flex justify-between font-bold text-orange-600">
+            <div className="flex justify-between font-bold text-orange-600 dark:text-orange-400">
               <span>Balance Due</span>
-              <span>${balanceDue.toFixed(2)}</span>
+              <span>{format(balanceDue)}</span>
             </div>
           )}
         </div>
@@ -260,7 +262,7 @@ export function InvoiceDetailClient({
                     {payment.reference_number ?? "—"}
                   </td>
                   <td className="px-4 py-3 text-end font-medium">
-                    ${Number(payment.amount).toFixed(2)}
+                    {format(payment.amount)}
                   </td>
                 </tr>
               ))}

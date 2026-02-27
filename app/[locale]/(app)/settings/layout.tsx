@@ -1,6 +1,6 @@
 import { redirect } from "@/i18n/navigation";
 import type { Locale } from "@/i18n/config";
-import { getCurrentUser } from "@/lib/auth/getCurrentUser";
+import { getCurrentUserCached } from "@/lib/auth/getCurrentUser";
 import { getTranslations } from "next-intl/server";
 
 const ALLOWED_ROLES = ["admin", "manager"] as const;
@@ -13,7 +13,7 @@ export default async function SettingsLayout({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  const user = await getCurrentUser();
+  const user = await getCurrentUserCached();
 
   if (!user) {
     return redirect({ href: "/auth/login", locale: locale as Locale });

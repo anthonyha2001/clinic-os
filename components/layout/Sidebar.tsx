@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { usePathname } from "@/i18n/navigation";
 import { Link } from "@/i18n/navigation";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
   HomeIcon,
@@ -87,8 +89,16 @@ function canShowItem(
 export function Sidebar({ user, permissions, locale, isOpen, onClose }: SidebarProps) {
   const t = useTranslations("nav");
   const pathname = usePathname();
+  const router = useRouter();
   const isRtl = locale === "ar";
   const userPermissions = permissions.length ? permissions : user.permissions;
+  const prefetchTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  useEffect(() => {
+    return () => {
+      Object.values(prefetchTimers.current).forEach((timer) => clearTimeout(timer));
+    };
+  }, []);
 
   const visibleItems = NAV_ITEMS.filter((item) =>
     canShowItem(item, user.roles, userPermissions)
@@ -134,7 +144,17 @@ export function Sidebar({ user, permissions, locale, isOpen, onClose }: SidebarP
                 <Link
                   key={item.key}
                   href={item.href}
+                  prefetch={true}
                   onClick={onClose}
+                  onMouseEnter={() => {
+                    clearTimeout(prefetchTimers.current[item.key]);
+                    prefetchTimers.current[item.key] = setTimeout(() => {
+                      router.prefetch(item.href);
+                    }, 150);
+                  }}
+                  onMouseLeave={() => {
+                    clearTimeout(prefetchTimers.current[item.key]);
+                  }}
                   className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                     isActive
                       ? "bg-white/20 text-white"

@@ -1,8 +1,12 @@
 "use client";
 import { useState, useEffect } from "react";
+import { Plus, Trash2, Check, Loader2, Pencil, X, Calendar } from "lucide-react";
+import { useTheme } from "next-themes";
+import { useCurrency } from "@/lib/context/CurrencyContext";
+import type { WorkingHours, OffDay, DayKey } from "@/types/schedule";
+import { DEFAULT_WORKING_HOURS } from "@/types/schedule";
 
-const TABS = ["Services", "Provider Types", "Clinic Info", "WhatsApp"] as const;
-import { Plus, Trash2, Check, Loader2, Pencil, X } from "lucide-react";
+const TABS = ["Services", "Provider Types", "Clinic Info", "Appearance", "Schedule", "WhatsApp"] as const;
 
 const PROVIDER_TYPES = [
   "General Practitioner", "Dentist", "Physiotherapist", "Dermatologist",
@@ -13,6 +17,7 @@ const PROVIDER_TYPES = [
 
 type OrgSettings = {
   name?: string;
+  currency?: string;
   clinic_phone?: string;
   clinic_address?: string;
   clinic_email?: string;
@@ -23,7 +28,25 @@ type OrgSettings = {
   whatsapp_number?: string;
   whatsapp_api_token?: string;
   whatsapp_phone_number_id?: string;
+  working_hours?: WorkingHours;
+  off_days?: OffDay[];
 };
+
+const CURRENCY_OPTIONS = [
+  { code: "USD", label: "USD - US Dollar ($)" },
+  { code: "EUR", label: "EUR - Euro (€)" },
+  { code: "GBP", label: "GBP - British Pound (£)" },
+  { code: "LBP", label: "LBP - Lebanese Pound (ل.ل)" },
+  { code: "AED", label: "AED - UAE Dirham (د.إ)" },
+  { code: "SAR", label: "SAR - Saudi Riyal (﷼)" },
+  { code: "EGP", label: "EGP - Egyptian Pound (E£)" },
+  { code: "JOD", label: "JOD - Jordanian Dinar (JD)" },
+  { code: "KWD", label: "KWD - Kuwaiti Dinar (KD)" },
+  { code: "QAR", label: "QAR - Qatari Riyal (QR)" },
+  { code: "TRY", label: "TRY - Turkish Lira (₺)" },
+  { code: "CAD", label: "CAD - Canadian Dollar (CA$)" },
+  { code: "AUD", label: "AUD - Australian Dollar (A$)" },
+];
 
 type Service = {
   id: string;
@@ -59,23 +82,50 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
   const [testLoading, setTestLoading] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string; mock?: boolean } | null>(null);
   const [clinicName, setClinicName] = useState("");
+  const [currency, setCurrency] = useState("USD");
+  const [workingHours, setWorkingHours] = useState<WorkingHours>(DEFAULT_WORKING_HOURS);
+  const [offDays, setOffDays] = useState<OffDay[]>([]);
+  const [savingSchedule, setSavingSchedule] = useState(false);
+  const [scheduleSaved, setScheduleSaved] = useState(false);
+  const [showAddOffDay, setShowAddOffDay] = useState(false);
+  const [newOffDay, setNewOffDay] = useState({ date: "", label: "", recurring: false });
+  const { format } = useCurrency();
+  const { theme, setTheme } = useTheme();
 
   useEffect(() => {
     if (orgSettings.name !== undefined) setClinicName(orgSettings.name);
   }, [orgSettings.name]);
 
   useEffect(() => {
-    fetch("/api/settings", { credentials: "include" })
-      .then((r) => r.json())
-      .then((d) => setOrgSettings(d ?? {}))
-      .catch(() => {});
-  }, []);
+    if (orgSettings.currency !== undefined) setCurrency(orgSettings.currency || "USD");
+  }, [orgSettings.currency]);
 
   useEffect(() => {
-    fetch("/api/auth/me", { credentials: "include" })
-      .then((r) => r.json())
-      .then((d) => setOrgSlug(d?.organizationSlug ?? d?.organization_slug ?? null))
-      .catch(() => setOrgSlug(null));
+    if (orgSettings.working_hours) {
+      setWorkingHours({ ...DEFAULT_WORKING_HOURS, ...orgSettings.working_hours } as WorkingHours);
+    }
+  }, [orgSettings.working_hours]);
+
+  useEffect(() => {
+    if (Array.isArray(orgSettings.off_days)) {
+      setOffDays(orgSettings.off_days);
+    }
+  }, [orgSettings.off_days]);
+
+  useEffect(() => {
+    const opts = { credentials: "include" as RequestCredentials };
+    Promise.all([
+      fetch("/api/settings", opts).then((r) => r.json()).then((d) => setOrgSettings(d ?? {})).catch(() => {}),
+      fetch("/api/auth/me", opts).then((r) => r.json()).then((d) => setOrgSlug(d?.organizationSlug ?? d?.organization_slug ?? null)).catch(() => setOrgSlug(null)),
+      fetch("/api/services", opts)
+        .then((r) => r.json())
+        .then((d) => {
+          const raw = Array.isArray(d) ? d : d?.services ?? d;
+          setServices(Array.isArray(raw) ? raw : []);
+        })
+        .catch(() => {})
+        .finally(() => setLoadingServices(false)),
+    ]);
   }, []);
 
   useEffect(() => {
@@ -85,17 +135,6 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
       setBookingUrl("");
     }
   }, [orgSlug]);
-
-  useEffect(() => {
-    fetch("/api/services", { credentials: "include" })
-      .then((r) => r.json())
-      .then((d) => {
-        const raw = Array.isArray(d) ? d : d?.services ?? d;
-        setServices(Array.isArray(raw) ? raw : []);
-        setLoadingServices(false);
-      })
-      .catch(() => setLoadingServices(false));
-  }, []);
 
   async function addService() {
     if (!newService.name_en.trim()) return;
@@ -138,6 +177,69 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
     }
     setSavingSettings(false);
   }
+
+  async function saveWorkingHours() {
+    setSavingSchedule(true);
+    setScheduleSaved(false);
+    const res = await fetch("/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ working_hours: workingHours }),
+    });
+    if (res.ok) {
+      const d = await res.json();
+      setOrgSettings((prev) => ({ ...prev, ...d }));
+      setScheduleSaved(true);
+      setTimeout(() => setScheduleSaved(false), 3000);
+    }
+    setSavingSchedule(false);
+  }
+
+  async function saveOffDays() {
+    setSavingSchedule(true);
+    setScheduleSaved(false);
+    const res = await fetch("/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ off_days: offDays }),
+    });
+    if (res.ok) {
+      const d = await res.json();
+      setOrgSettings((prev) => ({ ...prev, ...d }));
+      setScheduleSaved(true);
+      setTimeout(() => setScheduleSaved(false), 3000);
+    }
+    setSavingSchedule(false);
+  }
+
+  function addOffDay() {
+    if (!newOffDay.date || !newOffDay.label.trim()) return;
+    const id = crypto.randomUUID();
+    const item: OffDay = { id, date: newOffDay.date, label: newOffDay.label.trim(), recurring: newOffDay.recurring };
+    const updated = [...offDays, item].sort((a, b) => a.date.localeCompare(b.date));
+    setOffDays(updated);
+    setNewOffDay({ date: "", label: "", recurring: false });
+    setShowAddOffDay(false);
+    saveSettings({ off_days: updated });
+  }
+
+  function removeOffDay(id: string) {
+    const updated = offDays.filter((o) => o.id !== id);
+    setOffDays(updated);
+    saveSettings({ off_days: updated });
+  }
+
+  const DAY_LABELS: Record<DayKey, string> = {
+    monday: "Monday",
+    tuesday: "Tuesday",
+    wednesday: "Wednesday",
+    thursday: "Thursday",
+    friday: "Friday",
+    saturday: "Saturday",
+    sunday: "Sunday",
+  };
 
   async function testWhatsApp() {
     if (!testPhone) return;
@@ -262,7 +364,7 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Price ($)</label>
+                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Price</label>
                     <input
                       type="number"
                       placeholder="0.00"
@@ -343,7 +445,7 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
                               placeholder="0"
                             />
                           ) : (
-                            `$${Number(price).toFixed(2)}`
+                            format(price)
                           )}
                         </td>
                         <td className="px-5 py-3 text-end">
@@ -363,7 +465,7 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
                           {isEditing ? null : (
                             <button
                               onClick={() => toggleService(sv.id, active)}
-                              className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${active ? "bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700" : "bg-gray-100 text-gray-500 hover:bg-green-100 hover:text-green-700"}`}
+                              className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${active ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-red-100 hover:text-red-700 dark:hover:bg-red-900/30 dark:hover:text-red-400" : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 hover:bg-green-100 hover:text-green-700 dark:hover:bg-green-900/30 dark:hover:text-green-400"}`}
                             >
                               {active ? "Active" : "Inactive"}
                             </button>
@@ -375,7 +477,7 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
                               <button
                                 onClick={saveEdit}
                                 disabled={savingEdit || !editForm.name_en.trim()}
-                                className="rounded p-1.5 text-green-600 hover:bg-green-100 disabled:opacity-50"
+                                className="rounded p-1.5 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 disabled:opacity-50"
                                 title="Save"
                               >
                                 {savingEdit ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
@@ -456,6 +558,29 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
             </div>
           </div>
 
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Currency</label>
+            <div className="flex gap-2">
+              <select
+                value={currency}
+                onChange={e => setCurrency(e.target.value)}
+                className="flex-1 rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
+              >
+                {CURRENCY_OPTIONS.map(c => (
+                  <option key={c.code} value={c.code}>{c.label}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => saveSettings({ currency })}
+                disabled={savingSettings || currency === (orgSettings.currency ?? "USD")}
+                className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {savingSettings ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+
           {orgSlug && (
             <div className="rounded-xl border bg-muted/30 p-4">
               <p className="text-sm font-semibold mb-1">Your Public Booking Link</p>
@@ -490,6 +615,340 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
         </div>
       )}
 
+      {/* APPEARANCE TAB */}
+      {activeTab === "Appearance" && (
+        <div className="rounded-xl border bg-card p-5 space-y-6">
+          <h2 className="text-sm font-semibold mb-4">Appearance</h2>
+
+          <div className="space-y-3">
+            <label className="text-sm font-medium block">Theme Preference</label>
+            <div className="flex gap-2 flex-wrap">
+              {(["light", "system", "dark"] as const).map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setTheme(t)}
+                  className={`rounded-xl px-4 py-2.5 text-sm font-medium border-2 transition-all capitalize ${
+                    theme === t
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-border hover:border-primary/30"
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Currency</label>
+            <div className="flex gap-2">
+              <select
+                value={currency}
+                onChange={e => setCurrency(e.target.value)}
+                className="flex-1 max-w-xs rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
+              >
+                {CURRENCY_OPTIONS.map(c => (
+                  <option key={c.code} value={c.code}>{c.label}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => saveSettings({ currency })}
+                disabled={savingSettings || currency === (orgSettings.currency ?? "USD")}
+                className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {savingSettings ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Language</label>
+            <p className="text-sm text-muted-foreground">
+              Current locale: <span className="font-medium text-foreground">{locale}</span>. Change the URL to switch language (e.g. /en/... for English, /fr/... for French, /ar/... for Arabic).
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* SCHEDULE TAB */}
+      {activeTab === "Schedule" && (
+        <div className="space-y-5">
+          {/* Working Hours */}
+          <div className="rounded-xl border bg-card p-5">
+            <h2 className="text-sm font-semibold mb-4">Working Hours</h2>
+            <p className="text-xs text-muted-foreground mb-4">Set opening hours for each day. Affects appointment booking availability.</p>
+            <div className="space-y-3">
+              {(Object.keys(DAY_LABELS) as DayKey[]).map((day) => {
+                const s = workingHours[day] ?? DEFAULT_WORKING_HOURS[day];
+                const isOpen = s?.open ?? true;
+                return (
+                  <div
+                    key={day}
+                    className={`flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 ${
+                      isOpen ? "bg-background" : "opacity-50 bg-muted/30"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-[100px]">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setWorkingHours((wh) => ({
+                            ...wh,
+                            [day]: {
+                              ...(wh[day] ?? DEFAULT_WORKING_HOURS[day]),
+                              open: !isOpen,
+                            },
+                          }))
+                        }
+                        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                          isOpen ? "bg-primary" : "bg-muted"
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                            isOpen ? "translate-x-6" : "translate-x-1"
+                          }`}
+                        />
+                      </button>
+                      <span className="text-sm font-medium">{DAY_LABELS[day]}</span>
+                    </div>
+                    {isOpen ? (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="time"
+                            value={s?.from ?? "08:00"}
+                            onChange={(e) =>
+                              setWorkingHours((wh) => ({
+                                ...wh,
+                                [day]: { ...(wh[day] ?? DEFAULT_WORKING_HOURS[day]), from: e.target.value },
+                              }))
+                            }
+                            className="rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          />
+                          <span className="text-muted-foreground">to</span>
+                          <input
+                            type="time"
+                            value={s?.to ?? "18:00"}
+                            onChange={(e) =>
+                              setWorkingHours((wh) => ({
+                                ...wh,
+                                [day]: { ...(wh[day] ?? DEFAULT_WORKING_HOURS[day]), to: e.target.value },
+                              }))
+                            }
+                            className="rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <input
+                              type="checkbox"
+                              checked={!!(s?.break_from && s?.break_to)}
+                              onChange={(e) => {
+                                const hasBreak = e.target.checked;
+                                setWorkingHours((wh) => ({
+                                  ...wh,
+                                  [day]: {
+                                    ...(wh[day] ?? DEFAULT_WORKING_HOURS[day]),
+                                    break_from: hasBreak ? "13:00" : null,
+                                    break_to: hasBreak ? "14:00" : null,
+                                  },
+                                }));
+                              }}
+                              className="rounded border"
+                            />
+                            Break
+                          </label>
+                          {s?.break_from && s?.break_to && (
+                            <>
+                              <input
+                                type="time"
+                                value={s.break_from}
+                                onChange={(ev) =>
+                                  setWorkingHours((wh) => ({
+                                    ...wh,
+                                    [day]: { ...(wh[day] ?? DEFAULT_WORKING_HOURS[day]), break_from: ev.target.value },
+                                  }))
+                                }
+                                className="rounded-lg border px-2 py-1.5 text-xs bg-background"
+                              />
+                              <span className="text-muted-foreground text-xs">-</span>
+                              <input
+                                type="time"
+                                value={s.break_to}
+                                onChange={(ev) =>
+                                  setWorkingHours((wh) => ({
+                                    ...wh,
+                                    [day]: { ...(wh[day] ?? DEFAULT_WORKING_HOURS[day]), break_to: ev.target.value },
+                                  }))
+                                }
+                                className="rounded-lg border px-2 py-1.5 text-xs bg-background"
+                              />
+                            </>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                        Closed
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={saveWorkingHours}
+                disabled={savingSchedule}
+                className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingSchedule ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+                Save Working Hours
+              </button>
+              {scheduleSaved && (
+                <span className="text-sm text-green-600 dark:text-green-400">Saved successfully</span>
+              )}
+            </div>
+          </div>
+
+          {/* Off Days */}
+          <div className="rounded-xl border bg-card p-5">
+            <h2 className="text-sm font-semibold mb-4">Off Days / Holidays</h2>
+            <p className="text-xs text-muted-foreground mb-4">Add dates when the clinic is closed. Recurring off days repeat every year.</p>
+            {offDays.length === 0 && !showAddOffDay ? (
+              <p className="text-sm text-muted-foreground py-4">No off days configured. Add holidays and clinic closures.</p>
+            ) : (
+              <div className="space-y-3 mb-4">
+                {(() => {
+                  const today = new Date().toISOString().split("T")[0];
+                  const grouped = offDays.reduce<Record<string, OffDay[]>>((acc, o) => {
+                    const month = o.date.slice(0, 7);
+                    if (!acc[month]) acc[month] = [];
+                    acc[month].push(o);
+                    return acc;
+                  }, {});
+                  const months = Object.keys(grouped).sort();
+                  return months.map((month) => {
+                    const year = month.slice(0, 4);
+                    const m = parseInt(month.slice(5), 10);
+                    const monthLabel = new Date(parseInt(year, 10), m - 1, 1).toLocaleDateString("en", {
+                      month: "long",
+                      year: "numeric",
+                    });
+                    return (
+                      <div key={month}>
+                        <p className="text-xs font-medium text-muted-foreground mb-2">{monthLabel}</p>
+                        <div className="flex flex-wrap gap-2">
+                          {grouped[month]!.map((o) => {
+                            const d = new Date(o.date + "T12:00:00");
+                            const dateLabel = d.toLocaleDateString("en", {
+                              weekday: "long",
+                              month: "long",
+                              day: "numeric",
+                              year: "numeric",
+                            });
+                            const isToday = o.date === today;
+                            const isUpcoming = o.date >= today;
+                            return (
+                              <div
+                                key={o.id}
+                                className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+                                  isToday || isUpcoming
+                                    ? "border-primary/30 bg-primary/5"
+                                    : "border-border bg-muted/20"
+                                }`}
+                              >
+                                <Calendar className="size-4 text-muted-foreground shrink-0" />
+                                <div>
+                                  <p className="font-medium">{dateLabel}</p>
+                                  <p className="text-xs text-muted-foreground">{o.label}{o.recurring ? " (recurring)" : ""}</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removeOffDay(o.id)}
+                                  className="ml-auto rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                  aria-label="Remove"
+                                >
+                                  <X className="size-4" />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            )}
+            {showAddOffDay ? (
+              <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Date</label>
+                  <input
+                    type="date"
+                    value={newOffDay.date}
+                    onChange={(e) => setNewOffDay((n) => ({ ...n, date: e.target.value }))}
+                    className="w-full rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Label</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Christmas, Staff Training"
+                    value={newOffDay.label}
+                    onChange={(e) => setNewOffDay((n) => ({ ...n, label: e.target.value }))}
+                    className="w-full rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={newOffDay.recurring}
+                    onChange={(e) => setNewOffDay((n) => ({ ...n, recurring: e.target.checked }))}
+                    className="rounded border"
+                  />
+                  Repeat every year
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddOffDay(false);
+                      setNewOffDay({ date: "", label: "", recurring: false });
+                    }}
+                    className="rounded-lg border px-4 py-2 text-sm hover:bg-muted"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={addOffDay}
+                    disabled={!newOffDay.date || !newOffDay.label.trim()}
+                    className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowAddOffDay(true)}
+                className="rounded-lg border border-dashed px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground flex items-center gap-2"
+              >
+                <Plus className="size-4" /> Add Off Day
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* WHATSAPP TAB */}
       {activeTab === "WhatsApp" && (
         <div className="space-y-5">
@@ -504,7 +963,7 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
               <button
                 onClick={() => saveSettings({ whatsapp_enabled: !orgSettings.whatsapp_enabled })}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  orgSettings.whatsapp_enabled ? "bg-green-500" : "bg-gray-300"
+                  orgSettings.whatsapp_enabled ? "bg-green-500" : "bg-muted"
                 }`}
               >
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
@@ -611,7 +1070,7 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
             )}
 
             {orgSettings.whatsapp_provider === "mock" && (
-              <div className="rounded-lg bg-yellow-50 border border-yellow-200 px-4 py-3 text-sm text-yellow-800 mt-2">
+              <div className="rounded-lg bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-900/50 px-4 py-3 text-sm text-yellow-800 dark:text-yellow-300 mt-2">
                 🧪 Mock mode — messages will be logged to the server console only. No real WhatsApp messages sent.
               </div>
             )}
@@ -668,8 +1127,8 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
               <div
                 className={`rounded-lg px-4 py-3 text-sm ${
                   testResult.success
-                    ? "bg-green-50 border border-green-200 text-green-800"
-                    : "bg-red-50 border border-red-200 text-red-800"
+                    ? "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900/50 text-green-800 dark:text-green-300"
+                    : "bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 text-red-800 dark:text-red-300"
                 }`}
               >
                 {testResult.success

@@ -1,5 +1,7 @@
 "use client";
 
+import { useCurrency } from "@/lib/context/CurrencyContext";
+
 import {
   Calendar,
   DollarSign,
@@ -34,6 +36,7 @@ export function KPIGrid({
   noShowRate,
   newPatientsThisMonth,
 }: KPIGridProps) {
+  const { format } = useCurrency();
   const cards = [
     {
       label: "Today's Appointments",
@@ -45,7 +48,7 @@ export function KPIGrid({
     },
     {
       label: "Outstanding Balance",
-      value: `$${totalUnpaid.toLocaleString("en", { minimumFractionDigits: 0 })}`,
+      value: format(totalUnpaid),
       sub: `${unpaidCount} unpaid invoices`,
       color:
         unpaidCount > 0

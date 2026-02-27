@@ -77,7 +77,9 @@ type WhatsAppConfig = {
     }
   
     // ── Mock / development ──
-    console.log("📱 [WhatsApp MOCK]", { to: phone, message });
+    if (process.env.NODE_ENV !== "production") {
+      console.log("📱 [WhatsApp MOCK]", { to: phone, messageLength: message?.length ?? 0 });
+    }
     return { success: true, messageId: `mock_${Date.now()}`, mock: true };
   }
   

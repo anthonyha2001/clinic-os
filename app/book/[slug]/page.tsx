@@ -9,7 +9,9 @@ export default async function PublicBookingPage({
 }) {
   const [org] = await pgClient`
     SELECT id, name, slug, timezone, currency,
-           booking_enabled, booking_message, phone, address, logo_url
+           booking_enabled, booking_message,
+           phone, address, logo_url,
+           working_hours, off_days
     FROM organizations
     WHERE slug = ${params.slug}
     LIMIT 1

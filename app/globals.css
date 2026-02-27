@@ -17,7 +17,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not(.light) {
     --background: #0f172a;
     --foreground: #f8fafc;
     --card: #1e293b;
@@ -30,6 +30,20 @@
     --sidebar: #020617;
     --sidebar-foreground: #f8fafc;
   }
+}
+
+.dark {
+  --background: #0f172a;
+  --foreground: #f8fafc;
+  --card: #1e293b;
+  --card-foreground: #f8fafc;
+  --primary: #22d3ee;
+  --primary-foreground: #0f172a;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  --border: #334155;
+  --sidebar: #020617;
+  --sidebar-foreground: #f8fafc;
 }
 
 body {

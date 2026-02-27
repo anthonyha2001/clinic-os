@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { X } from "lucide-react";
+import { useCurrency } from "@/lib/context/CurrencyContext";
 
 type Invoice = {
   id: string;
@@ -23,6 +24,7 @@ export function QuickPayDrawer({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const { format, symbol } = useCurrency();
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [form, setForm] = useState({
     payment_method_id: "",
@@ -120,20 +122,20 @@ export function QuickPayDrawer({
 
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <div className="rounded-lg border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 px-4 py-3 text-sm text-red-800 dark:text-red-300">
               {error}
             </div>
           )}
 
-          <div className="rounded-xl bg-orange-50 border border-orange-100 p-4">
+          <div className="rounded-xl bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/50 p-4">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Invoice Total</span>
-              <span>${Number(invoice.total).toFixed(2)}</span>
+              <span>{format(invoice.total)}</span>
             </div>
             <div className="flex justify-between text-sm font-bold mt-1">
-              <span className="text-orange-700">Balance Due</span>
-              <span className="text-orange-700">
-                ${balanceDue.toFixed(2)}
+              <span className="text-orange-700 dark:text-orange-400">Balance Due</span>
+              <span className="text-orange-700 dark:text-orange-400">
+                {format(balanceDue)}
               </span>
             </div>
           </div>
@@ -143,8 +145,8 @@ export function QuickPayDrawer({
               Amount <span className="text-red-500">*</span>
             </label>
             <div className="relative">
-              <span className="absolute start-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                $
+              <span className="absolute start-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+                {symbol}
               </span>
               <input
                 type="number"
@@ -159,9 +161,8 @@ export function QuickPayDrawer({
               />
             </div>
             {Number(form.amount) < balanceDue && Number(form.amount) > 0 && (
-              <p className="text-xs text-orange-600 mt-1">
-                Partial payment — $
-                {(balanceDue - Number(form.amount)).toFixed(2)} will remain
+              <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">
+                Partial payment — {format(balanceDue - Number(form.amount))} will remain
                 outstanding
               </p>
             )}
@@ -234,7 +235,7 @@ export function QuickPayDrawer({
           >
             {loading
               ? "Recording..."
-              : `Record $${Number(form.amount).toFixed(2)}`}
+              : `Record ${format(form.amount)}`}
           </button>
         </div>
       </div>

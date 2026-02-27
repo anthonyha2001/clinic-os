@@ -1,5 +1,7 @@
 "use client";
 
+import { useCurrency } from "@/lib/context/CurrencyContext";
+
 import { useState } from "react";
 import { X } from "lucide-react";
 
@@ -15,6 +17,7 @@ interface DiscountFormProps {
 }
 
 export function DiscountForm({ invoice, onClose, onSuccess }: DiscountFormProps) {
+  const { format, symbol } = useCurrency();
   const [form, setForm] = useState({
     type: "percent" as "percent" | "amount",
     discount_percent: "",
@@ -95,7 +98,7 @@ export function DiscountForm({ invoice, onClose, onSuccess }: DiscountFormProps)
             <div className="flex justify-between">
               <span className="text-muted-foreground">Subtotal</span>
               <span className="font-medium">
-                ${Number(invoice.subtotal).toFixed(2)}
+                {format(invoice.subtotal)}
               </span>
             </div>
           </div>
@@ -125,7 +128,7 @@ export function DiscountForm({ invoice, onClose, onSuccess }: DiscountFormProps)
                     : "hover:bg-muted"
                 }`}
               >
-                Fixed Amount ($)
+                Fixed Amount
               </button>
             </div>
           </div>
@@ -154,7 +157,7 @@ export function DiscountForm({ invoice, onClose, onSuccess }: DiscountFormProps)
               {form.discount_percent && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   =
-                  $
+                  {symbol}
                   {(
                     (Number(invoice.subtotal) * Number(form.discount_percent)) /
                     100
@@ -170,7 +173,7 @@ export function DiscountForm({ invoice, onClose, onSuccess }: DiscountFormProps)
               </label>
               <div className="relative">
                 <span className="absolute start-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                  $
+                  {symbol}
                 </span>
                 <input
                   type="number"

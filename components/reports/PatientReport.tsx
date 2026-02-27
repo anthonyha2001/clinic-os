@@ -86,17 +86,7 @@ export function PatientReport({ locale }: { locale: string }) {
 
   const summary = (data?.summary as Record<string, unknown>) ?? {};
   const prevSummary = (prevData?.summary as Record<string, unknown>) ?? {};
-
-  if (!data) {
-    return (
-      <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-6 text-center">
-        <p className="font-medium text-destructive">Failed to load patients report</p>
-        <p className="text-sm text-muted-foreground mt-1">
-          You may need permission to view reports, or the server could not load data.
-        </p>
-      </div>
-    );
-  }
+  const hasError = !loading && (!data || (data as { error?: string }).error);
 
   const newPatients = Number(summary.new_patients ?? summary.patients_created_in_range ?? 0);
   const prevNew = Number(prevSummary.new_patients ?? 0);
@@ -121,8 +111,6 @@ export function PatientReport({ locale }: { locale: string }) {
   const byGender = (data?.by_gender as Record<string, unknown>[]) ?? [];
   const byAgeGroup = (data?.by_age_group as Record<string, unknown>[]) ?? [];
 
-  if (loading) return <ReportSkeleton />;
-
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -141,6 +129,17 @@ export function PatientReport({ locale }: { locale: string }) {
         </button>
       </div>
 
+      {hasError ? (
+        <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-6 text-center">
+          <p className="font-medium text-destructive">Failed to load patients report</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            You may need permission to view reports, or the server could not load data.
+          </p>
+        </div>
+      ) : loading ? (
+        <ReportSkeleton />
+      ) : (
+      <>
       <KPICards
         cards={[
           {
@@ -253,6 +252,8 @@ export function PatientReport({ locale }: { locale: string }) {
           </div>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

@@ -77,37 +77,12 @@ export function UnpaidReport({ locale }: { locale: string }) {
     URL.revokeObjectURL(a.href);
   }
 
-  if (loading) {
-    return (
-      <div className="space-y-4 animate-pulse">
-        <div className="h-10 w-96 bg-muted rounded-lg" />
-        <div className="grid grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-24 bg-muted rounded-xl" />
-          ))}
-        </div>
-        <div className="h-64 bg-muted rounded-xl" />
-      </div>
-    );
-  }
-
-  if (!data) {
-    return (
-      <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-6 text-center">
-        <p className="font-medium text-destructive">Failed to load unpaid report</p>
-        <p className="text-sm text-muted-foreground mt-1">
-          You may need permission to view reports, or the server could not load data.
-        </p>
-      </div>
-    );
-  }
-
+  const hasError = !loading && (!data || (data as { error?: string }).error);
   const invoices = [...(data?.invoices ?? [])].sort((a, b) =>
     sortBy === "balance_due"
       ? b.balance_due - a.balance_due
       : b.days_outstanding - a.days_outstanding
   );
-
   const buckets = [
     {
       label: "< 30 days",
@@ -151,7 +126,7 @@ export function UnpaidReport({ locale }: { locale: string }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <ReportDatePicker
           startDate={startDate}
@@ -161,12 +136,32 @@ export function UnpaidReport({ locale }: { locale: string }) {
         />
         <button
           onClick={exportCSV}
-          className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+          disabled={loading || !data?.invoices?.length}
+          className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted flex items-center gap-1.5 disabled:opacity-50"
         >
-          ↓ Export CSV
+          <Download className="size-3.5 inline-block" />
+          Export CSV
         </button>
       </div>
 
+      {hasError ? (
+        <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-6 text-center">
+          <p className="font-medium text-destructive">Failed to load unpaid report</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            You may need permission to view reports, or the server could not load data.
+          </p>
+        </div>
+      ) : loading ? (
+        <div className="space-y-4 animate-pulse">
+          <div className="grid grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-24 bg-muted rounded-xl" />
+            ))}
+          </div>
+          <div className="h-64 bg-muted rounded-xl" />
+        </div>
+      ) : (
+      <>
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <div className="rounded-xl border bg-card p-5 lg:col-span-1">
           <p className="text-sm text-muted-foreground">Total Outstanding</p>
@@ -319,6 +314,8 @@ export function UnpaidReport({ locale }: { locale: string }) {
           </table>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

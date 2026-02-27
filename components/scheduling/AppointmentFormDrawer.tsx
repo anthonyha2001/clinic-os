@@ -1,5 +1,9 @@
 "use client";
 
+import { useCurrency } from "@/lib/context/CurrencyContext";
+import { isClinicOpen, getOffDayForDate } from "@/lib/services/schedule/isClinicOpen";
+import type { WorkingHours, OffDay } from "@/types/schedule";
+
 import { useState, useEffect } from "react";
 import { X, ClipboardList } from "lucide-react";
 
@@ -69,6 +73,7 @@ export function AppointmentFormDrawer({
   onClose,
   onSuccess,
 }: AppointmentFormDrawerProps) {
+  const { format } = useCurrency();
   const [providersFromApi, setProvidersFromApi] = useState<ProviderOption[]>([]);
   const [services, setServices] = useState<ServiceOption[]>([]);
   const [patientSearch, setPatientSearch] = useState("");
@@ -106,6 +111,7 @@ export function AppointmentFormDrawer({
   });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [scheduleSettings, setScheduleSettings] = useState<{ working_hours?: WorkingHours; off_days?: OffDay[] } | null>(null);
 
   useEffect(() => {
     if (providersProp && providersProp.length > 0) return;
@@ -135,6 +141,13 @@ export function AppointmentFormDrawer({
   useEffect(() => {
     if (initialProviderId) setForm((f) => ({ ...f, provider_id: initialProviderId }));
   }, [initialProviderId]);
+
+  useEffect(() => {
+    fetch("/api/settings", { credentials: "include" })
+      .then((r) => r.json())
+      .then((d) => setScheduleSettings({ working_hours: d?.working_hours, off_days: d?.off_days }))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (patientSearch.length < 2 && !initialPatientId) { setPatients([]); return; }
@@ -248,6 +261,12 @@ export function AppointmentFormDrawer({
     p.user?.full_name ?? p.full_name ?? p.name ?? p.id;
   const serviceLabel = (s: ServiceOption) => s.name_en ?? s.nameEn ?? s.id;
 
+  const startDate = form.start_time ? new Date(form.start_time) : null;
+  const openResult = startDate && scheduleSettings
+    ? isClinicOpen(scheduleSettings.working_hours, scheduleSettings.off_days, startDate)
+    : null;
+  const offDay = startDate && scheduleSettings ? getOffDayForDate(scheduleSettings.off_days, startDate) : null;
+
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} aria-hidden />
@@ -261,8 +280,18 @@ export function AppointmentFormDrawer({
 
         <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-6">
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-900/50 px-4 py-3 text-sm text-red-800 dark:text-red-300">
               {error}
+            </div>
+          )}
+
+          {openResult && !openResult.open && (
+            <div className="rounded-lg border border-yellow-200 bg-yellow-50 dark:bg-yellow-950/30 dark:border-yellow-900/50 px-4 py-3 text-sm text-yellow-800 dark:text-yellow-300">
+              {offDay ? (
+                <p>⚠️ This date is marked as an off day: {offDay.label}</p>
+              ) : (
+                <p>⚠️ This time is outside regular working hours</p>
+              )}
             </div>
           )}
 
@@ -366,7 +395,7 @@ export function AppointmentFormDrawer({
                               <option value="">Select item...</option>
                               {availableItems.map((item) => (
                                 <option key={item.id} value={item.id}>
-                                  {item.service?.name_en ?? item.description_en} — {item.quantity_completed}/{item.quantity_total} sessions · ${Number(item.unit_price).toFixed(0)}
+                                  {item.service?.name_en ?? item.description_en} — {item.quantity_completed}/{item.quantity_total} sessions · {format(Number(item.unit_price))}
                                 </option>
                               ))}
                             </select>

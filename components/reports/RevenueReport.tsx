@@ -6,6 +6,7 @@ import { useReportDateRange } from "./useReportDateRange";
 import { ReportDatePicker } from "./ReportDatePicker";
 import { KPICards } from "./KPICards";
 import { BarChart } from "./BarChart";
+import { useCurrency } from "@/lib/context/CurrencyContext";
 
 type GroupBy = "day" | "week" | "month";
 
@@ -29,6 +30,7 @@ function ReportSkeleton() {
 }
 
 export function RevenueReport({ locale }: { locale: string }) {
+  const { format } = useCurrency();
   const { startDate, endDate, setStartDate, setEndDate, prevStart } =
     useReportDateRange(6);
   const [groupBy, setGroupBy] = useState<GroupBy>("month");
@@ -112,18 +114,7 @@ export function RevenueReport({ locale }: { locale: string }) {
 
   const periods = (data?.periods as Record<string, unknown>[]) ?? [];
   const prevPeriods = (prevData?.periods as Record<string, unknown>[]) ?? [];
-
-  if (!data) {
-    return (
-      <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-6 text-center">
-        <p className="font-medium text-destructive">Failed to load revenue report</p>
-        <p className="text-sm text-muted-foreground mt-1">
-          You may need permission to view reports, or the server could not load data.
-        </p>
-      </div>
-    );
-  }
-
+  const hasError = !loading && (!data || (data as { error?: string }).error);
   const chartRows = periods.map((p, i) => ({
     label: p.period as string,
     value: Number(p.total_revenue),
@@ -131,8 +122,6 @@ export function RevenueReport({ locale }: { locale: string }) {
       ? Number(prevPeriods[i].total_revenue)
       : undefined,
   }));
-
-  if (loading) return <ReportSkeleton />;
 
   return (
     <div className="space-y-5">
@@ -165,11 +154,22 @@ export function RevenueReport({ locale }: { locale: string }) {
         </button>
       </div>
 
+      {hasError ? (
+        <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-6 text-center">
+          <p className="font-medium text-destructive">Failed to load revenue report</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            You may need permission to view reports, or the server could not load data.
+          </p>
+        </div>
+      ) : loading ? (
+        <ReportSkeleton />
+      ) : (
+      <>
       <KPICards
         cards={[
           {
             label: "Total Revenue",
-            value: `$${currTotal.toLocaleString("en", { minimumFractionDigits: 2 })}`,
+            value: format(currTotal),
             color: "text-green-600",
             trend: { value: trend, label: "vs prev period" },
           },
@@ -180,7 +180,7 @@ export function RevenueReport({ locale }: { locale: string }) {
           },
           {
             label: "Avg per Payment",
-            value: `$${avgPayment.toFixed(2)}`,
+            value: format(avgPayment),
             trend: { value: avgTrend, label: "vs prev period" },
           },
           {
@@ -273,6 +273,8 @@ export function RevenueReport({ locale }: { locale: string }) {
           </div>
         ))}
       </div>
+      </>
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Download } from "lucide-react";
+import { useCurrency } from "@/lib/context/CurrencyContext";
 import { useReportDateRange } from "./useReportDateRange";
 import { ReportDatePicker } from "./ReportDatePicker";
 import { KPICards } from "./KPICards";
@@ -27,6 +28,7 @@ function ReportSkeleton() {
 }
 
 export function ProviderReport({ locale }: { locale: string }) {
+  const { format } = useCurrency();
   const { startDate, endDate, setStartDate, setEndDate } =
     useReportDateRange(3);
   const [data, setData] = useState<Record<string, unknown> | null>(null);
@@ -86,19 +88,6 @@ export function ProviderReport({ locale }: { locale: string }) {
     a.click();
   }
 
-  if (loading) return <ReportSkeleton />;
-
-  if (!data || (data as { error?: string }).error) {
-    return (
-      <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-6 text-center">
-        <p className="font-medium text-destructive">Failed to load providers report</p>
-        <p className="text-sm text-muted-foreground mt-1">
-          You may need permission to view reports, or the server could not load data.
-        </p>
-      </div>
-    );
-  }
-
   const providers = Array.isArray(data)
     ? data
     : Array.isArray((data as Record<string, unknown> | null)?.providers)
@@ -113,6 +102,8 @@ export function ProviderReport({ locale }: { locale: string }) {
     0
   );
 
+  const hasError = !loading && (!data || (data as { error?: string }).error);
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -124,19 +115,31 @@ export function ProviderReport({ locale }: { locale: string }) {
         />
         <button
           onClick={exportCSV}
-          className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted flex items-center gap-1.5"
+          disabled={loading || providers.length === 0}
+          className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted flex items-center gap-1.5 disabled:opacity-50"
         >
           <Download className="size-3.5 inline-block" />
           Export CSV
         </button>
       </div>
 
+      {hasError ? (
+        <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-6 text-center">
+          <p className="font-medium text-destructive">Failed to load providers report</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            You may need permission to view reports, or the server could not load data.
+          </p>
+        </div>
+      ) : loading ? (
+        <ReportSkeleton />
+      ) : (
+        <>
       <KPICards
         cards={[
           { label: "Active Providers", value: providers.length },
           {
             label: "Total Revenue",
-            value: `$${totalRevenue.toLocaleString()}`,
+            value: format(totalRevenue),
             color: "text-green-600",
           },
           { label: "Total Appointments", value: totalAppts },
@@ -144,8 +147,8 @@ export function ProviderReport({ locale }: { locale: string }) {
             label: "Avg Revenue / Provider",
             value:
               providers.length > 0
-                ? `$${(totalRevenue / providers.length).toFixed(0)}`
-                : "$0",
+                ? format(totalRevenue / providers.length)
+                : format(0),
           },
         ]}
       />
@@ -166,7 +169,7 @@ export function ProviderReport({ locale }: { locale: string }) {
                   label: (p.provider_name as string).split(" ")[0],
                   value: Number(p.revenue ?? 0),
                 }))}
-                formatValue={(v) => `$${v.toLocaleString()}`}
+                formatValue={(v) => format(v)}
               />
             </div>
             <div className="rounded-xl border bg-card p-5">
@@ -217,9 +220,9 @@ export function ProviderReport({ locale }: { locale: string }) {
                     Revenue share
                   </th>
                 </tr>
-              </thead>
-              <tbody>
-                {providers.map((p, i) => {
+          </thead>
+          <tbody>
+                {(providers as Record<string, unknown>[]).map((p, i) => {
                   const revShare =
                     totalRevenue > 0
                       ? (Number(p.revenue) / totalRevenue) * 100
@@ -280,6 +283,8 @@ export function ProviderReport({ locale }: { locale: string }) {
             </table>
           </div>
         </>
+      )}
+    </>
       )}
     </div>
   );

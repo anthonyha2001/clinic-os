@@ -40,6 +40,9 @@ export function UserMenu({ user, locale }: UserMenuProps) {
     router.replace("/auth/login", { locale: currentLocale });
   }
 
+  const displayName = user.fullName.includes("@")
+    ? user.fullName.split("@")[0].replace(/[._-]+/g, " ").trim() || "User"
+    : user.fullName;
   const primaryRole = user.roles[0] ?? "user";
 
   return (
@@ -51,7 +54,7 @@ export function UserMenu({ user, locale }: UserMenuProps) {
         aria-expanded={isOpen}
         aria-haspopup="true"
       >
-        <span className="font-medium">{user.fullName}</span>
+        <span className="font-medium">{displayName}</span>
         <span className="rounded bg-muted px-2 py-0.5 text-xs capitalize text-muted-foreground">
           {primaryRole}
         </span>
@@ -61,7 +64,7 @@ export function UserMenu({ user, locale }: UserMenuProps) {
       {isOpen && (
         <div className="absolute top-full end-0 z-50 mt-2 w-56 rounded-lg border border-border bg-card py-2 shadow-lg">
           <div className="px-4 py-2">
-            <p className="font-medium text-foreground">{user.fullName}</p>
+            <p className="font-medium text-foreground">{displayName}</p>
             <p className="text-xs text-muted-foreground capitalize">{primaryRole}</p>
           </div>
           <hr className="my-2 border-border" />
