@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createAppointmentSchema } from "@/lib/validations/appointment";
 import { createAppointment } from "@/lib/services/appointments/create";
 import { listAppointments } from "@/lib/services/appointments/list";
+import { notifyNewAppointment } from "@/lib/notifications/notifyNewAppointment";
 import { withAuth } from "@/lib/auth";
 
 const listQuerySchema = z.object({
@@ -39,7 +40,11 @@ export const GET = withAuth(async (request: NextRequest, { user }) => {
       endDate: parsed.data.end_date,
     });
 
-    return NextResponse.json(appointments);
+    return NextResponse.json(appointments, {
+      headers: {
+        "Cache-Control": "private, max-age=30, stale-while-revalidate=60",
+      },
+    });
   } catch (e) {
     console.error("GET /api/appointments error:", e);
     return NextResponse.json(
@@ -64,6 +69,16 @@ export const POST = withAuth(async (request: NextRequest, { user }) => {
       user.id,
       user.organizationId
     );
+
+    notifyNewAppointment({
+      organizationId: user.organizationId,
+      appointmentId: appointment.id,
+      patientId: appointment.patient_id,
+      providerId: appointment.provider_id,
+      startTime: appointment.start_time,
+      endTime: appointment.end_time,
+    }).catch(() => {});
+
     return NextResponse.json(appointment, { status: 201 });
   } catch (e: unknown) {
     const err = e as Error & { statusCode?: number };

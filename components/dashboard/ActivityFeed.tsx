@@ -1,28 +1,8 @@
 "use client";
 
-import { Plus, Pencil, Trash2, RefreshCw, CreditCard, Lock, ClipboardList } from "lucide-react";
-
 type Activity = Record<string, unknown>;
 
-const ACTION_ICONS: Record<string, React.ComponentType<{ className?: string; size?: number }>> = {
-  create: Plus,
-  update: Pencil,
-  delete: Trash2,
-  status_change: RefreshCw,
-  payment: CreditCard,
-  login: Lock,
-};
-
-const ACTION_COLORS: Record<string, string> = {
-  create: "text-green-600",
-  update: "text-blue-600",
-  delete: "text-red-600",
-  status_change: "text-purple-600",
-  payment: "text-orange-600",
-  login: "text-gray-600",
-};
-
-function timeAgo(dateStr: string): string {
+function timeAgo(dateStr: string, locale: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
   const hours = Math.floor(mins / 60);
@@ -30,7 +10,35 @@ function timeAgo(dateStr: string): string {
   if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m ago`;
   if (hours < 24) return `${hours}h ago`;
-  return `${days}d ago`;
+  if (days === 1) return "Yesterday";
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  return rtf.format(-days, "day");
+}
+
+function humanizeAction(action: string, entity: string): string {
+  const normalized = `${action} ${entity}`
+    .toLowerCase()
+    .replace(/[._-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (normalized.includes("discount applied") && normalized.includes("invoice")) {
+    return "Applied discount to invoice";
+  }
+  if (normalized.includes("service price") && normalized.includes("change")) {
+    return "Updated service price";
+  }
+  if (normalized.includes("status")) return "Updated status";
+  if (normalized.includes("payment")) return "Recorded payment";
+  if (normalized.includes("create")) return `Created ${entity || "record"}`;
+  if (normalized.includes("delete")) return `Deleted ${entity || "record"}`;
+  if (normalized.includes("update")) return `Updated ${entity || "record"}`;
+
+  return normalized.replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+function getInitial(name: string): string {
+  return name.trim().charAt(0).toUpperCase() || "S";
 }
 
 export function ActivityFeed({
@@ -41,53 +49,53 @@ export function ActivityFeed({
   locale: string;
 }) {
   return (
-    <div className="rounded-xl border bg-card p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold">Recent Activity</h2>
-        <span className="text-xs text-muted-foreground">
-          {activities.length} events
-        </span>
+    <div className="app-card">
+      <div className="flex items-center justify-between mb-4 pb-3 border-b border-border/60">
+        <h2 className="text-sm font-semibold text-foreground">Recent Activity</h2>
+        <div className="text-xs">
+          <span className="text-xs text-muted-foreground">
+            {activities.length} events
+          </span>
+        </div>
       </div>
-
+ 
       {activities.length === 0 ? (
         <p className="text-xs text-muted-foreground text-center py-4">
           No recent activity.
         </p>
       ) : (
-        <div className="space-y-2">
+        <div>
           {activities.slice(0, 10).map((activity, i) => {
             const action = (activity.action as string) ?? "update";
             const entity = (activity.entity_type as string) ?? "";
-            const entityId = (activity.entity_id as string) ?? "";
             const actor =
               (activity.actor as Record<string, string> | undefined)
                 ?.full_name ?? "System";
             const createdAt = (activity.created_at as string) ?? "";
             const description =
-              (activity.description as string) ?? `${action} ${entity}`;
-
+              (activity.description as string) ??
+              humanizeAction(action, entity);
+ 
             return (
-              <div key={i} className="flex items-start gap-2 text-xs">
-                <span className="shrink-0 mt-0.5">
-                  {(function IconWrap() {
-                    const Icon = ACTION_ICONS[action] ?? ClipboardList;
-                    return <Icon className="inline-block size-4" />;
-                  })()}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="leading-tight">
+              <div
+                key={i}
+                className="flex items-start gap-3 py-2.5 border-b border-border/50 last:border-0 hover:bg-muted/30 -mx-1 px-1 rounded transition-colors duration-150"
+              >
+                <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5 border border-[hsl(213,87%,53%)]/50">
+                  <span className="text-[10px] font-semibold text-muted-foreground">
+                    {getInitial(actor)}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0 space-y-0.5">
+                  <p className="text-xs text-foreground leading-snug">
                     <span className="font-medium">{actor}</span>{" "}
-                    <span
-                      className={
-                        ACTION_COLORS[action] ?? "text-muted-foreground"
-                      }
-                    >
+                    <span className="text-muted-foreground">
                       {description}
                     </span>
                   </p>
                   {createdAt && (
-                    <p className="text-muted-foreground mt-0.5">
-                      {timeAgo(createdAt)}
+                    <p className="text-[11px] text-muted-foreground/50">
+                      {timeAgo(createdAt, locale)}
                     </p>
                   )}
                 </div>

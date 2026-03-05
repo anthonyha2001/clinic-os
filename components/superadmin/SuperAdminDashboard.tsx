@@ -48,7 +48,7 @@ export function SuperAdminDashboard() {
 
   // Create user form
   const [showCreateUser, setShowCreateUser] = useState<string | null>(null);
-  const [userForm, setUserForm] = useState({ email: "", full_name: "", phone: "", password: "" });
+  const [userForm, setUserForm] = useState({ email: "", full_name: "", phone: "", password: "", role: "admin" as string });
   const [userLoading, setUserLoading] = useState(false);
   const [userError, setUserError] = useState("");
   const [userSuccess, setUserSuccess] = useState("");
@@ -130,7 +130,7 @@ export function SuperAdminDashboard() {
     const data = await res.json();
     if (!res.ok) { setUserError(data.error); setUserLoading(false); return; }
     setUserSuccess(`User ${userForm.email} created successfully!`);
-    setUserForm({ email: "", full_name: "", phone: "", password: "" });
+    setUserForm({ email: "", full_name: "", phone: "", password: "", role: "admin" });
     setOrgUsers(prev => ({ ...prev, [orgId]: [] })); // force refresh
     fetchOrgUsers(orgId);
     setUserLoading(false);
@@ -153,23 +153,25 @@ export function SuperAdminDashboard() {
   // LOGIN SCREEN
   if (!authenticated) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
-        <div className="w-full max-w-sm">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-red-600 mb-4">
-              <Shield className="size-8 text-white" />
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-6">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(220,38,38,0.15),transparent)]" />
+        <div className="relative w-full max-w-md">
+          <div className="text-center mb-10">
+            <div className="inline-flex items-center justify-center h-20 w-20 rounded-2xl bg-gradient-to-br from-red-600 to-red-700 shadow-lg shadow-red-500/25 mb-5 ring-2 ring-red-500/30">
+              <Shield className="size-10 text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-white">Superadmin</h1>
-            <p className="text-gray-400 text-sm mt-1">Clinic OS Control Panel</p>
+            <h1 className="text-3xl font-bold text-white tracking-tight">Superadmin</h1>
+            <p className="text-slate-400 text-sm mt-2">Clinic OS Control Panel</p>
           </div>
-          <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6 space-y-4">
+          <div className="bg-slate-900/80 backdrop-blur-xl rounded-2xl border border-slate-700/50 p-8 shadow-2xl shadow-black/20 space-y-5">
             {authError && (
-              <div className="rounded-lg bg-red-900/30 border border-red-700 px-4 py-2 text-sm text-red-400">
+              <div className="rounded-xl bg-red-950/50 border border-red-800/50 px-4 py-3 text-sm text-red-300 flex items-center gap-2">
+                <XCircle className="size-4 shrink-0" />
                 {authError}
               </div>
             )}
             <div>
-              <label className="text-xs font-medium text-gray-400 mb-1.5 block">Access PIN</label>
+              <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 block">Access PIN</label>
               <div className="relative">
                 <input
                   type={showPin ? "text" : "password"}
@@ -177,11 +179,12 @@ export function SuperAdminDashboard() {
                   onChange={e => setPin(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && handleLogin()}
                   placeholder="Enter superadmin PIN"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/50 pr-10"
+                  className="w-full bg-slate-800/80 border border-slate-600/60 rounded-xl px-4 py-3 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500/50 pr-12 transition-all"
                 />
                 <button
+                  type="button"
                   onClick={() => setShowPin(s => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition-colors"
                 >
                   {showPin ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                 </button>
@@ -190,13 +193,13 @@ export function SuperAdminDashboard() {
             <button
               onClick={handleLogin}
               disabled={authLoading || !pin}
-              className="w-full bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg py-2.5 text-sm font-medium transition-colors flex items-center justify-center gap-2"
+              className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 disabled:opacity-50 disabled:hover:from-red-600 disabled:hover:to-red-700 text-white rounded-xl py-3 text-sm font-semibold transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-900/30 hover:shadow-red-800/40"
             >
-              {authLoading ? <Loader2 className="size-4 animate-spin" /> : <Shield className="size-4" />}
+              {authLoading ? <Loader2 className="size-5 animate-spin" /> : <Shield className="size-5" />}
               {authLoading ? "Authenticating..." : "Access Control Panel"}
             </button>
           </div>
-          <p className="text-center text-xs text-gray-600 mt-4">
+          <p className="text-center text-xs text-slate-500 mt-6">
             Set SUPERADMIN_PIN in .env.local
           </p>
         </div>
@@ -206,69 +209,74 @@ export function SuperAdminDashboard() {
 
   // DASHBOARD
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(220,38,38,0.08),transparent)] pointer-events-none" />
       {/* Top bar */}
-      <div className="border-b border-gray-800 bg-gray-900 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-red-600 flex items-center justify-center">
-            <Shield className="size-4 text-white" />
+      <div className="relative border-b border-slate-700/50 bg-slate-900/60 backdrop-blur-sm px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-red-600 to-red-700 flex items-center justify-center shadow-lg shadow-red-900/30 ring-2 ring-red-500/20">
+            <Shield className="size-5 text-white" />
           </div>
           <div>
-            <h1 className="text-sm font-bold">Clinic OS Superadmin</h1>
-            <p className="text-xs text-gray-400">Full system control</p>
+            <h1 className="text-base font-bold tracking-tight">Clinic OS Superadmin</h1>
+            <p className="text-xs text-slate-400">Full system control</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <button
             onClick={fetchData}
             disabled={loading}
-            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-800"
+            className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors px-4 py-2 rounded-xl hover:bg-slate-800/80 border border-transparent hover:border-slate-700"
           >
-            <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </button>
           <button
             onClick={handleLogout}
-            className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 px-3 py-1.5 rounded-lg hover:bg-gray-800"
+            className="flex items-center gap-2 text-sm text-red-400 hover:text-red-300 px-4 py-2 rounded-xl hover:bg-red-950/30 border border-transparent hover:border-red-900/50 transition-colors"
           >
-            <LogOut className="size-3.5" />
+            <LogOut className="size-4" />
             Logout
           </button>
         </div>
       </div>
 
-      <div className="p-6 space-y-6 max-w-7xl mx-auto">
+      <div className="relative p-6 space-y-6 max-w-7xl mx-auto">
         {/* KPI Cards */}
         {summary && (
           <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
             {[
               { label: "Organizations", value: summary.total_orgs, icon: Building2, color: "text-blue-400" },
-              { label: "Active Users", value: summary.active_users, icon: Users, color: "text-green-400" },
-              { label: "Appts Today", value: summary.appts_today, icon: Calendar, color: "text-yellow-400" },
-              { label: "Appts This Month", value: summary.appts_month, icon: TrendingUp, color: "text-purple-400" },
+              { label: "Active Users", value: summary.active_users, icon: Users, color: "text-emerald-400" },
+              { label: "Appts Today", value: summary.appts_today, icon: Calendar, color: "text-amber-400" },
+              { label: "Appts This Month", value: summary.appts_month, icon: TrendingUp, color: "text-violet-400" },
               { label: "Revenue (Month)", value: `$${Number(summary.revenue_month).toLocaleString()}`, icon: DollarSign, color: "text-emerald-400" },
               { label: "Total Patients", value: summary.total_patients, icon: Activity, color: "text-pink-400" },
             ].map(({ label, value, icon: Icon, color }) => (
-              <div key={label} className="bg-gray-900 rounded-xl border border-gray-800 p-4">
-                <Icon className={`size-5 ${color} mb-2`} />
-                <p className="text-2xl font-bold">{value}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{label}</p>
+              <div key={label} className="bg-slate-900/60 backdrop-blur-sm rounded-2xl border border-slate-700/50 p-5 hover:border-slate-600/50 transition-colors shadow-lg shadow-black/10">
+                <Icon className={`size-6 ${color} mb-3`} />
+                <p className="text-2xl font-bold tracking-tight">{value}</p>
+                <p className="text-xs text-slate-400 mt-1">{label}</p>
               </div>
             ))}
           </div>
         )}
 
         {/* Organizations */}
-        <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-800 flex items-center justify-between">
+        <div className="bg-slate-900/60 backdrop-blur-sm rounded-2xl border border-slate-700/50 overflow-hidden shadow-xl shadow-black/10">
+          <div className="px-6 py-4 border-b border-slate-700/50 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Database className="size-5 text-blue-400" />
-              <h2 className="font-semibold">Organizations</h2>
-              <span className="bg-gray-800 text-gray-400 text-xs rounded-full px-2 py-0.5">{orgs.length}</span>
+              <div className="h-10 w-10 rounded-xl bg-slate-800/80 flex items-center justify-center">
+                <Database className="size-5 text-blue-400" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-base">Organizations</h2>
+                <span className="bg-slate-800 text-slate-400 text-xs rounded-full px-2.5 py-0.5">{orgs.length}</span>
+              </div>
             </div>
             <button
               onClick={() => setShowCreateOrg(s => !s)}
-              className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors shadow-lg shadow-blue-900/30"
             >
               <Plus className="size-3.5" />
               New Organization
@@ -277,39 +285,39 @@ export function SuperAdminDashboard() {
 
           {/* Create org form */}
           {showCreateOrg && (
-            <div className="px-5 py-4 border-b border-gray-800 bg-gray-800/50">
-              <h3 className="text-sm font-semibold mb-3">Create Organization</h3>
-              {orgError && <div className="mb-3 text-xs text-red-400 bg-red-900/20 rounded-lg px-3 py-2">{orgError}</div>}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="px-6 py-5 border-b border-slate-700/50 bg-slate-800/30">
+              <h3 className="text-sm font-semibold mb-4">Create Organization</h3>
+              {orgError && <div className="mb-4 text-sm text-red-300 bg-red-950/40 border border-red-900/50 rounded-xl px-4 py-3">{orgError}</div>}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
-                  <label className="text-xs text-gray-400 mb-1 block">Clinic Name *</label>
+                  <label className="text-xs font-medium text-slate-400 mb-1.5 block">Clinic Name *</label>
                   <input value={orgForm.name} onChange={e => setOrgForm(f => ({ ...f, name: e.target.value, slug: e.target.value.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") }))}
-                    placeholder="Dr. Smith Clinic" className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+                    placeholder="Dr. Smith Clinic" className="w-full bg-slate-800/80 border border-slate-600/60 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all" />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-400 mb-1 block">Slug *</label>
+                  <label className="text-xs font-medium text-slate-400 mb-1.5 block">Slug *</label>
                   <input value={orgForm.slug} onChange={e => setOrgForm(f => ({ ...f, slug: e.target.value }))}
-                    placeholder="dr-smith-clinic" className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+                    placeholder="dr-smith-clinic" className="w-full bg-slate-800/80 border border-slate-600/60 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all" />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-400 mb-1 block">Timezone</label>
+                  <label className="text-xs font-medium text-slate-400 mb-1.5 block">Timezone</label>
                   <select value={orgForm.timezone} onChange={e => setOrgForm(f => ({ ...f, timezone: e.target.value }))}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none">
+                    className="w-full bg-slate-800/80 border border-slate-600/60 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30">
                     {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs text-gray-400 mb-1 block">Currency</label>
+                  <label className="text-xs font-medium text-slate-400 mb-1.5 block">Currency</label>
                   <select value={orgForm.currency} onChange={e => setOrgForm(f => ({ ...f, currency: e.target.value }))}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none">
+                    className="w-full bg-slate-800/80 border border-slate-600/60 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30">
                     {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
               </div>
-              <div className="flex gap-2 mt-3">
-                <button onClick={() => setShowCreateOrg(false)} className="px-4 py-1.5 text-xs border border-gray-600 rounded-lg hover:bg-gray-700 transition-colors">Cancel</button>
+              <div className="flex gap-3 mt-4">
+                <button onClick={() => setShowCreateOrg(false)} className="px-4 py-2 text-sm border border-slate-600 rounded-xl hover:bg-slate-700/50 transition-colors">Cancel</button>
                 <button onClick={handleCreateOrg} disabled={orgLoading || !orgForm.name}
-                  className="px-4 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg text-white font-medium flex items-center gap-1.5 transition-colors">
+                  className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-xl text-white font-medium flex items-center gap-2 transition-colors">
                   {orgLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
                   Create
                 </button>
@@ -319,11 +327,11 @@ export function SuperAdminDashboard() {
 
           {/* Orgs list */}
           {loading ? (
-            <div className="p-8 text-center text-gray-500 text-sm animate-pulse">Loading organizations...</div>
+            <div className="p-12 text-center text-slate-500 text-sm animate-pulse">Loading organizations...</div>
           ) : orgs.length === 0 ? (
-            <div className="p-8 text-center text-gray-500 text-sm">No organizations yet.</div>
+            <div className="p-12 text-center text-slate-500 text-sm">No organizations yet.</div>
           ) : (
-            <div className="divide-y divide-gray-800">
+            <div className="divide-y divide-slate-700/50">
               {orgs.map(org => {
                 const online = isOnline(org.last_activity);
                 const suspended = suspendedOrgs.has(org.id);
@@ -331,23 +339,23 @@ export function SuperAdminDashboard() {
 
                 return (
                   <div key={org.id}>
-                    <div className="px-5 py-4 hover:bg-gray-800/30 transition-colors">
+                    <div className="px-6 py-4 hover:bg-slate-800/30 transition-colors">
                       <div className="flex items-center justify-between gap-4">
                         <div className="flex items-center gap-3 min-w-0">
                           {/* Online indicator */}
                           <div className="relative shrink-0">
-                            <div className={`h-10 w-10 rounded-xl flex items-center justify-center text-sm font-bold ${suspended ? "bg-gray-700 text-gray-400" : "bg-blue-900/50 text-blue-400"}`}>
+                            <div className={`h-10 w-10 rounded-xl flex items-center justify-center text-sm font-bold ${suspended ? "bg-slate-700 text-slate-400" : "bg-blue-900/50 text-blue-400"}`}>
                               {org.name.charAt(0).toUpperCase()}
                             </div>
-                            <span className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-gray-900 ${online && !suspended ? "bg-green-400" : "bg-gray-600"}`} />
+                            <span className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-slate-900 ${online && !suspended ? "bg-green-400" : "bg-slate-600"}`} />
                           </div>
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
                               <p className="font-semibold text-sm truncate">{org.name}</p>
                               {suspended && <span className="text-xs bg-red-900/30 text-red-400 border border-red-800 rounded-full px-1.5 py-0.5">Suspended</span>}
-                              <span className="text-xs text-gray-500">/{org.slug}</span>
+                              <span className="text-xs text-slate-500">/{org.slug}</span>
                             </div>
-                            <p className="text-xs text-gray-400 mt-0.5">
+                            <p className="text-xs text-slate-400 mt-0.5">
                               {org.user_count} users · {org.patient_count} patients · {org.timezone} · {org.currency}
                             </p>
                           </div>
@@ -357,19 +365,19 @@ export function SuperAdminDashboard() {
                         <div className="hidden lg:flex items-center gap-6 text-center shrink-0">
                           <div>
                             <p className="text-sm font-semibold">{org.appts_today}</p>
-                            <p className="text-xs text-gray-500">Today</p>
+                            <p className="text-xs text-slate-500">Today</p>
                           </div>
                           <div>
                             <p className="text-sm font-semibold">{org.appts_month}</p>
-                            <p className="text-xs text-gray-500">This month</p>
+                            <p className="text-xs text-slate-500">This month</p>
                           </div>
                           <div>
                             <p className="text-sm font-semibold text-emerald-400">${Number(org.revenue_month).toLocaleString()}</p>
-                            <p className="text-xs text-gray-500">Revenue</p>
+                            <p className="text-xs text-slate-500">Revenue</p>
                           </div>
                           <div className="flex items-center gap-1">
-                            <span className={`h-2 w-2 rounded-full ${online && !suspended ? "bg-green-400" : "bg-gray-600"}`} />
-                            <span className="text-xs text-gray-400">{online && !suspended ? "Active" : "Inactive"}</span>
+                            <span className={`h-2 w-2 rounded-full ${online && !suspended ? "bg-green-400" : "bg-slate-600"}`} />
+                            <span className="text-xs text-slate-400">{online && !suspended ? "Active" : "Inactive"}</span>
                           </div>
                         </div>
 
@@ -386,7 +394,7 @@ export function SuperAdminDashboard() {
                               setExpandedOrg(expanded ? null : org.id);
                               if (!expanded) fetchOrgUsers(org.id);
                             }}
-                            className="text-xs px-3 py-1.5 rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors flex items-center gap-1"
+                            className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 transition-colors flex items-center gap-1"
                           >
                             {expanded ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
                             Manage
@@ -397,10 +405,10 @@ export function SuperAdminDashboard() {
 
                     {/* Expanded panel */}
                     {expanded && (
-                      <div className="border-t border-gray-800 bg-gray-800/20 px-5 py-4 space-y-4">
+                      <div className="border-t border-slate-800 bg-slate-800/20 px-5 py-4 space-y-4">
                         {/* Users list */}
                         <div className="flex items-center justify-between mb-2">
-                          <h3 className="text-sm font-semibold text-gray-300">Users in {org.name}</h3>
+                          <h3 className="text-sm font-semibold text-slate-300">Users in {org.name}</h3>
                           <button
                             onClick={() => setShowCreateUser(showCreateUser === org.id ? null : org.id)}
                             className="flex items-center gap-1.5 text-xs bg-green-700 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg transition-colors"
@@ -412,35 +420,50 @@ export function SuperAdminDashboard() {
 
                         {/* Create user form */}
                         {showCreateUser === org.id && (
-                          <div className="rounded-xl border border-gray-700 bg-gray-900 p-4 space-y-3">
-                            <h4 className="text-xs font-semibold text-gray-300">New User for {org.name}</h4>
+                          <div className="rounded-xl border border-slate-700 bg-slate-900 p-4 space-y-3">
+                            <h4 className="text-xs font-semibold text-slate-300">New User for {org.name}</h4>
                             {userError && <div className="text-xs text-red-400 bg-red-900/20 rounded px-3 py-2">{userError}</div>}
                             {userSuccess && <div className="text-xs text-green-400 bg-green-900/20 rounded px-3 py-2 flex items-center gap-1.5"><CheckCircle className="size-3.5" />{userSuccess}</div>}
                             <div className="grid grid-cols-2 gap-3">
                               <div>
-                                <label className="text-xs text-gray-400 mb-1 block">Full Name *</label>
+                                <label className="text-xs text-slate-400 mb-1 block">Full Name *</label>
                                 <input value={userForm.full_name} onChange={e => setUserForm(f => ({ ...f, full_name: e.target.value }))}
-                                  placeholder="Dr. John Smith" className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500/30" />
+                                  placeholder="Dr. John Smith" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-green-500/30" />
                               </div>
                               <div>
-                                <label className="text-xs text-gray-400 mb-1 block">Email *</label>
+                                <label className="text-xs text-slate-400 mb-1 block">Email *</label>
                                 <input type="email" value={userForm.email} onChange={e => setUserForm(f => ({ ...f, email: e.target.value }))}
-                                  placeholder="john@clinic.com" className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500/30" />
+                                  placeholder="john@clinic.com" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-green-500/30" />
                               </div>
                               <div>
-                                <label className="text-xs text-gray-400 mb-1 block">Phone</label>
+                                <label className="text-xs text-slate-400 mb-1 block">Phone</label>
                                 <input value={userForm.phone} onChange={e => setUserForm(f => ({ ...f, phone: e.target.value }))}
-                                  placeholder="+961 70 000 000" className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500/30" />
+                                  placeholder="+961 70 000 000" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-green-500/30" />
                               </div>
                               <div>
-                                <label className="text-xs text-gray-400 mb-1 block">Password (optional)</label>
+                                <label className="text-xs text-slate-400 mb-1 block">Password (optional)</label>
                                 <input type="password" value={userForm.password} onChange={e => setUserForm(f => ({ ...f, password: e.target.value }))}
-                                  placeholder="Auto-generated if empty" className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500/30" />
+                                  placeholder="Auto-generated if empty" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-green-500/30" />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-slate-400 mb-1">Role</label>
+                                <select
+                                  value={userForm.role}
+                                  onChange={(e) => setUserForm(f => ({ ...f, role: e.target.value }))}
+                                  className="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-500/50"
+                                >
+                                  <option value="admin">Admin</option>
+                                  <option value="manager">Manager</option>
+                                  <option value="provider">Provider / Doctor</option>
+                                  <option value="staff">Staff</option>
+                                  <option value="receptionist">Receptionist</option>
+                                  <option value="accountant">Accountant</option>
+                                </select>
                               </div>
                             </div>
                             <div className="flex gap-2">
                               <button onClick={() => { setShowCreateUser(null); setUserError(""); setUserSuccess(""); }}
-                                className="px-4 py-1.5 text-xs border border-gray-600 rounded-lg hover:bg-gray-700 transition-colors">Cancel</button>
+                                className="px-4 py-1.5 text-xs border border-slate-600 rounded-lg hover:bg-slate-700 transition-colors">Cancel</button>
                               <button onClick={() => handleCreateUser(org.id)} disabled={userLoading || !userForm.email || !userForm.full_name}
                                 className="px-4 py-1.5 text-xs bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-lg font-medium flex items-center gap-1.5">
                                 {userLoading ? <Loader2 className="size-3.5 animate-spin" /> : <UserPlus className="size-3.5" />}
@@ -452,23 +475,23 @@ export function SuperAdminDashboard() {
 
                         {/* Users table */}
                         {orgUsers[org.id] ? (
-                          <div className="rounded-xl border border-gray-700 overflow-hidden">
+                          <div className="rounded-xl border border-slate-700 overflow-hidden">
                             <table className="w-full text-sm">
                               <thead>
-                                <tr className="border-b border-gray-700 bg-gray-800/50">
-                                  <th className="px-4 py-2.5 text-start text-xs font-medium text-gray-400">Name</th>
-                                  <th className="px-4 py-2.5 text-start text-xs font-medium text-gray-400">Email</th>
-                                  <th className="px-4 py-2.5 text-start text-xs font-medium text-gray-400">Phone</th>
-                                  <th className="px-4 py-2.5 text-center text-xs font-medium text-gray-400">Status</th>
-                                  <th className="px-4 py-2.5 text-start text-xs font-medium text-gray-400">Joined</th>
+                                <tr className="border-b border-slate-700 bg-slate-800/50">
+                                  <th className="px-4 py-2.5 text-start text-xs font-medium text-slate-400">Name</th>
+                                  <th className="px-4 py-2.5 text-start text-xs font-medium text-slate-400">Email</th>
+                                  <th className="px-4 py-2.5 text-start text-xs font-medium text-slate-400">Phone</th>
+                                  <th className="px-4 py-2.5 text-center text-xs font-medium text-slate-400">Status</th>
+                                  <th className="px-4 py-2.5 text-start text-xs font-medium text-slate-400">Joined</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {(orgUsers[org.id] as Record<string, unknown>[]).map((u, i) => (
-                                  <tr key={i} className="border-b border-gray-800 hover:bg-gray-800/30 transition-colors">
+                                  <tr key={i} className="border-b border-slate-800 hover:bg-slate-800/30 transition-colors">
                                     <td className="px-4 py-2.5 font-medium">{u.full_name as string}</td>
-                                    <td className="px-4 py-2.5 text-gray-400">{u.email as string}</td>
-                                    <td className="px-4 py-2.5 text-gray-400">{(u.phone as string) ?? "—"}</td>
+                                    <td className="px-4 py-2.5 text-slate-400">{u.email as string}</td>
+                                    <td className="px-4 py-2.5 text-slate-400">{(u.phone as string) ?? "—"}</td>
                                     <td className="px-4 py-2.5 text-center">
                                       {u.is_active ? (
                                         <span className="inline-flex items-center gap-1 text-xs text-green-400"><CheckCircle className="size-3" />Active</span>
@@ -476,7 +499,7 @@ export function SuperAdminDashboard() {
                                         <span className="inline-flex items-center gap-1 text-xs text-red-400"><XCircle className="size-3" />Inactive</span>
                                       )}
                                     </td>
-                                    <td className="px-4 py-2.5 text-gray-400 text-xs">
+                                    <td className="px-4 py-2.5 text-slate-400 text-xs">
                                       {new Date(u.created_at as string).toLocaleDateString()}
                                     </td>
                                   </tr>
@@ -484,11 +507,11 @@ export function SuperAdminDashboard() {
                               </tbody>
                             </table>
                             {(orgUsers[org.id] as unknown[]).length === 0 && (
-                              <div className="px-4 py-6 text-center text-xs text-gray-500">No users yet.</div>
+                              <div className="px-4 py-6 text-center text-xs text-slate-500">No users yet.</div>
                             )}
                           </div>
                         ) : (
-                          <div className="text-center text-xs text-gray-500 py-4 animate-pulse">Loading users...</div>
+                          <div className="text-center text-xs text-slate-500 py-4 animate-pulse">Loading users...</div>
                         )}
 
                         {/* Quick stats */}
@@ -499,9 +522,9 @@ export function SuperAdminDashboard() {
                             { label: "Revenue (Month)", value: `$${Number(org.revenue_month).toLocaleString()}`, color: "text-emerald-400" },
                             { label: "Patients", value: org.patient_count, color: "text-pink-400" },
                           ].map(({ label, value, color }) => (
-                            <div key={label} className="bg-gray-900 rounded-xl border border-gray-800 p-3 text-center">
+                            <div key={label} className="bg-slate-900 rounded-xl border border-slate-800 p-3 text-center">
                               <p className={`text-lg font-bold ${color}`}>{value}</p>
-                              <p className="text-xs text-gray-500 mt-0.5">{label}</p>
+                              <p className="text-xs text-slate-500 mt-0.5">{label}</p>
                             </div>
                           ))}
                         </div>
@@ -512,7 +535,7 @@ export function SuperAdminDashboard() {
                             href={`/en/dashboard`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center gap-1.5 text-xs border border-gray-700 hover:bg-gray-800 px-4 py-2 rounded-lg transition-colors"
+                            className="flex items-center gap-1.5 text-xs border border-slate-700 hover:bg-slate-800 px-4 py-2 rounded-lg transition-colors"
                           >
                             <Settings className="size-3.5" />
                             Open Clinic Dashboard

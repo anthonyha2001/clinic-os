@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pgClient } from "@/db/index";
+import { notifyNewAppointment } from "@/lib/notifications/notifyNewAppointment";
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { slug: string } }
+  { params }: { params: Promise<{ slug: string }> }
 ) {
-  const body = await request.json();
+  try {
+    const { slug } = await params;
+    const body = await request.json();
   const {
     patient_name, patient_phone, patient_email,
     provider_id, service_id, date, time, notes,
@@ -18,7 +21,7 @@ export async function POST(
 
   const [org] = await pgClient`
     SELECT id, timezone FROM organizations
-    WHERE slug = ${params.slug} AND booking_enabled = true
+    WHERE slug = ${slug} AND booking_enabled = true
     LIMIT 1
   `;
   if (!org) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -71,17 +74,33 @@ export async function POST(
     `;
   }
 
-  // Get a system user to set as created_by (first admin of org)
+  if (!patient) {
+    return NextResponse.json({ error: "Failed to create patient" }, { status: 500 });
+  }
+
   const [systemUser] = await pgClient`
     SELECT u.id FROM users u
     JOIN user_roles ur ON ur.user_id = u.id
     JOIN roles r ON r.id = ur.role_id
     WHERE u.organization_id = ${org.id}
-      AND r.name = 'admin'
+      AND r.name IN ('admin', 'manager', 'provider')
     LIMIT 1
   `;
 
-  // Create appointment
+  let createdBy = systemUser?.id ?? null;
+  if (!createdBy) {
+    const [anyUser] = await pgClient`
+      SELECT id FROM users
+      WHERE organization_id = ${org.id}
+      LIMIT 1
+    `;
+    createdBy = anyUser?.id ?? null;
+  }
+
+  if (!createdBy) {
+    return NextResponse.json({ error: "Organization setup incomplete" }, { status: 500 });
+  }
+
   const [appointment] = await pgClient`
     INSERT INTO appointments (
       organization_id, patient_id, provider_id,
@@ -90,7 +109,7 @@ export async function POST(
     VALUES (
       ${org.id}, ${patient.id}, ${provider_id},
       ${startTime.toISOString()}, ${endTime.toISOString()},
-      'scheduled', ${notes ?? null}, ${systemUser.id}
+      'scheduled', ${notes ?? null}, ${createdBy}
     )
     RETURNING id
   `;
@@ -102,6 +121,16 @@ export async function POST(
     FROM services WHERE id = ${service_id}
   `;
 
+  notifyNewAppointment({
+    organizationId: org.id,
+    appointmentId: appointment.id,
+    patientId: patient.id,
+    providerId: provider_id,
+    startTime,
+    endTime,
+    patientName: patient_name,
+  }).catch(() => {});
+
   // Log booking request
   await pgClient`
     INSERT INTO booking_requests (
@@ -110,7 +139,7 @@ export async function POST(
       patient_name, patient_phone, patient_email, notes, status
     ) VALUES (
       ${org.id}, ${appointment.id}, ${patient.id},
-      ${service_id}, ${provider_id}, ${date}, ${time},
+      ${service_id}, ${provider_id}, ${date}::date, ${time},
       ${patient_name}, ${patient_phone}, ${patient_email ?? null},
       ${notes ?? null}, 'confirmed'
     )
@@ -122,4 +151,12 @@ export async function POST(
     start_time: startTime.toISOString(),
     end_time: endTime.toISOString(),
   }, { status: 201 });
+
+  } catch (e) {
+    console.error("Booking submit error:", e);
+    return NextResponse.json(
+      { error: "Booking failed", details: String(e) },
+      { status: 500 }
+    );
+  }
 }

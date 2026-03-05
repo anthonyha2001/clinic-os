@@ -270,7 +270,11 @@ export const GET = withAuth(async (request, { user }) => {
         : undefined,
     }));
 
-    return NextResponse.json(invoices);
+    return NextResponse.json(invoices, {
+      headers: {
+        "Cache-Control": "private, max-age=30, stale-while-revalidate=60",
+      },
+    });
   } catch (e: unknown) {
     console.error("GET /api/invoices error:", e);
     return NextResponse.json(

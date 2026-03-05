@@ -18,7 +18,11 @@ export const GET = withAuth(async (_req, { user }) => {
       LIMIT 1
     `;
     if (!org) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    return NextResponse.json(org);
+    return NextResponse.json(org, {
+      headers: {
+        "Cache-Control": "private, max-age=60, stale-while-revalidate=120",
+      },
+    });
   } catch (e) {
     console.error("GET /api/settings error:", e);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

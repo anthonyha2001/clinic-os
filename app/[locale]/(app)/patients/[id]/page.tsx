@@ -1,5 +1,16 @@
 import { setRequestLocale } from "next-intl/server";
-import { PatientDetailClient } from "@/components/patients/PatientDetailClient";
+import dynamic from "next/dynamic";
+
+const PatientDetailClient = dynamic(
+  () =>
+    import("@/components/patients/PatientDetailClient").then(
+      (mod) => mod.PatientDetailClient
+    ),
+  {
+    loading: () => <div className="h-24 animate-pulse rounded-xl bg-muted" />,
+    ssr: false,
+  }
+);
 
 export default async function PatientDetailPage({
   params,

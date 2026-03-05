@@ -3,8 +3,9 @@ import { pgClient } from "@/db/index";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { slug: string } }
+  { params }: { params: Promise<{ slug: string }> }
 ) {
+  const { slug } = await params;
   const { searchParams } = new URL(request.url);
   const date = searchParams.get("date");
   const providerId = searchParams.get("provider_id");
@@ -14,7 +15,7 @@ export async function GET(
   }
 
   const [org] = await pgClient`
-    SELECT id, timezone FROM organizations WHERE slug = ${params.slug} LIMIT 1
+    SELECT id, timezone FROM organizations WHERE slug = ${slug} LIMIT 1
   `;
   if (!org) return NextResponse.json({ error: "Not found" }, { status: 404 });
 

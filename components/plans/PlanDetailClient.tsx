@@ -188,6 +188,7 @@ export function PlanDetailClient({ planId, locale }: { planId: string; locale: s
       return;
     }
 
+    window.dispatchEvent(new Event("billing:invoice-from-appointment"));
     setSessionLoading(null);
     const r = await fetch(`/api/plans/${planId}`, { credentials: "include" });
     const d = await r.json();

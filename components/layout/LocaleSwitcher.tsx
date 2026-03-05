@@ -15,16 +15,16 @@ export function LocaleSwitcher() {
   }
 
   return (
-    <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/50 p-1">
+    <div className="flex items-center gap-0.5 rounded-lg border border-border/60 bg-muted/40 p-0.5">
       {locales.map((locale) => (
         <button
           key={locale}
           type="button"
           onClick={() => switchLocale(locale)}
-          className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+          className={`rounded-md px-2.5 py-1 text-[11px] font-medium tracking-wide transition-all duration-150 ${
             currentLocale === locale
-              ? "bg-primary text-primary-foreground"
-              : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              ? "bg-background text-foreground shadow-sm border border-border/60"
+              : "text-muted-foreground hover:text-foreground hover:bg-background/60"
           }`}
         >
           {locale.toUpperCase()}

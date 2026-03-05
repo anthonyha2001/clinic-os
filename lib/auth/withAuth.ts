@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser, type AuthUser } from "./getCurrentUser";
+import { getCurrentUser, getCurrentUserFast, type AuthUser } from "./getCurrentUser";
 
 type RouteParams = Record<string, string | string[] | undefined>;
 
@@ -47,7 +47,10 @@ export function withAuth(
   }
 
   return async (request: NextRequest, routeContext?: { params?: RouteParams }) => {
-    const user = await getCurrentUser();
+    let user = await getCurrentUserFast();
+    if (!user) {
+      user = await getCurrentUser();
+    }
 
     if (!user) {
       return NextResponse.json(

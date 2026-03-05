@@ -3,10 +3,11 @@ import { pgClient } from "@/db/index";
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { slug: string } }
+  { params }: { params: Promise<{ slug: string }> }
 ) {
+  const { slug } = await params;
   const [org] = await pgClient`
-    SELECT id FROM organizations WHERE slug = ${params.slug} LIMIT 1
+    SELECT id FROM organizations WHERE slug = ${slug} LIMIT 1
   `;
   if (!org) return NextResponse.json({ error: "Not found" }, { status: 404 });
 

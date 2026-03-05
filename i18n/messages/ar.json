@@ -36,6 +36,7 @@
   },
   "nav": {
     "dashboard": "لوحة التحكم",
+    "appointments": "المواعيد",
     "scheduling": "الجدولة",
     "patients": "المرضى",
     "billing": "الفواتير",
@@ -50,6 +51,7 @@
       "services": "الخدمات",
       "providerTypes": "أنواع مقدمي الخدمة",
       "clinicInfo": "معلومات العيادة",
+      "schedule": "Schedule",
       "whatsapp": "واتساب",
       "payments": "طرق الدفع",
       "policies": "السياسات",

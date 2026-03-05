@@ -36,6 +36,7 @@
   },
   "nav": {
     "dashboard": "Tableau de bord",
+    "appointments": "Rendez-vous",
     "scheduling": "Planification",
     "patients": "Patients",
     "billing": "Facturation",
@@ -50,6 +51,7 @@
       "services": "Services",
       "providerTypes": "Types de praticiens",
       "clinicInfo": "Infos clinique",
+      "schedule": "Schedule",
       "whatsapp": "WhatsApp",
       "payments": "Moyens de paiement",
       "policies": "Politiques",

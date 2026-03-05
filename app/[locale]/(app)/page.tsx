@@ -1,5 +1,13 @@
 import { setRequestLocale } from "next-intl/server";
-import { DashboardClient } from "@/components/dashboard/DashboardClient";
+import dynamic from "next/dynamic";
+
+const DashboardClient = dynamic(
+  () => import("@/components/dashboard/DashboardClient").then((mod) => mod.DashboardClient),
+  {
+    loading: () => <div className="h-24 animate-pulse rounded-xl bg-muted" />,
+    ssr: false,
+  }
+);
 
 export default async function DashboardPage({
   params,

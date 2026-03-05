@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { Calendar, Clock, User, Phone, Mail, ChevronRight, ChevronLeft, CheckCircle, Loader2, Stethoscope, MapPin } from "lucide-react";
 import { formatCurrency } from "@/lib/currency";
-import { getAvailableSlots, isClinicOpen, getOffDayForDate } from "@/lib/services/schedule/isClinicOpen";
+import { getAvailableSlots, getOffDayForDate } from "@/lib/services/schedule/isClinicOpen";
 import { DEFAULT_WORKING_HOURS } from "@/types/schedule";
 import type { WorkingHours, OffDay } from "@/types/schedule";
 
@@ -44,7 +44,7 @@ function generateSlots(
   const [fromH, fromM] = (schedule.from ?? "08:00").split(":").map(Number);
   const [toH, toM] = (schedule.to ?? "18:00").split(":").map(Number);
   const slots: { time: string; available: boolean }[] = [];
-  for (let m = fromH * 60 + fromM; m + duration <= toH * 60 + toM; m += 30) {
+  for (let m = fromH * 60 + fromM; m + duration <= toH * 60 + toM; m += duration) {
     const breakFrom = schedule.break_from ? schedule.break_from.split(":").map(Number) : null;
     const breakTo = schedule.break_to ? schedule.break_to.split(":").map(Number) : null;
     if (breakFrom && breakTo) {
@@ -69,22 +69,13 @@ function getDates(workingHours: WorkingHours | null | undefined, offDays: OffDay
     d.setDate(today.getDate() + i);
     const dayKey = DAY_MAP[d.getDay()];
     const schedule = wh[dayKey];
-    const off = od.find((o) => {
-      const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      if (o.date === dStr) return true;
-      if (o.recurring) {
-        const [, m, day] = o.date.split("-");
-        return m === String(d.getMonth() + 1).padStart(2, "0") && day === String(d.getDate()).padStart(2, "0");
-      }
-      return false;
+    const isClosed = !schedule?.open;
+    const offDay = getOffDayForDate(od, d);
+    result.push({
+      date: d,
+      disabled: isClosed || !!offDay,
+      reason: offDay?.label ?? (isClosed ? "Closed" : undefined),
     });
-    if (off) {
-      result.push({ date: d, disabled: true, reason: off.label });
-    } else if (!schedule?.open) {
-      result.push({ date: d, disabled: true, reason: "Closed" });
-    } else {
-      result.push({ date: d, disabled: false });
-    }
   }
   return result;
 }
@@ -134,7 +125,7 @@ export function PublicBookingClient({ org }: { org: Org }) {
   useEffect(() => {
     if (!selectedDate || !selectedProvider || !selectedService) return;
     setSlotsLoading(true);
-    const dateStr = selectedDate.toISOString().split("T")[0];
+    const dateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`;
     fetch(`/api/book/${org.slug}/availability?date=${dateStr}&provider_id=${selectedProvider.id}`)
       .then(r => r.json())
       .then(data => {
@@ -335,10 +326,12 @@ export function PublicBookingClient({ org }: { org: Org }) {
 
             {/* Time slots */}
             {selectedDate && (() => {
-              const openResult = isClinicOpen(org.working_hours, org.off_days, selectedDate);
+              const wh = org.working_hours ?? DEFAULT_WORKING_HOURS;
+              const dayKey = DAY_MAP[selectedDate.getDay()];
+              const schedule = wh[dayKey];
               const offDay = getOffDayForDate(org.off_days, selectedDate);
               const nextAvail = getNextAvailableDate(org.working_hours, org.off_days);
-              if (!openResult.open) {
+              if (!schedule?.open || !!offDay) {
                 return (
                   <div className="rounded-2xl bg-gray-50 border border-gray-200 p-6 text-center">
                     <p className="text-gray-700 font-medium">We&apos;re closed on this day</p>

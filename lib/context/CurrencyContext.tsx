@@ -8,7 +8,6 @@ import {
   useState,
 } from "react";
 import {
-  CURRENCIES,
   formatCurrency as formatCurrencyUtil,
   getCurrencySymbol,
 } from "@/lib/currency";
@@ -34,7 +33,7 @@ const CurrencyContext = createContext<CurrencyContextValue>({
 export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   const [currency, setCurrency] = useState<string>(defaultCurrency);
 
-  useEffect(() => {
+  const refreshCurrency = useCallback(() => {
     fetch("/api/settings", { credentials: "include" })
       .then((r) => r.json())
       .then((d) => {
@@ -43,6 +42,22 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    refreshCurrency();
+
+    const onCurrencyUpdated = (event: Event) => {
+      const nextCurrency = (event as CustomEvent<{ currency?: string }>).detail?.currency;
+      if (typeof nextCurrency === "string" && nextCurrency) {
+        setCurrency(nextCurrency);
+        return;
+      }
+      refreshCurrency();
+    };
+
+    window.addEventListener("currency-updated", onCurrencyUpdated);
+    return () => window.removeEventListener("currency-updated", onCurrencyUpdated);
+  }, [refreshCurrency]);
 
   const symbol = getCurrencySymbol(currency);
 

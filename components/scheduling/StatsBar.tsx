@@ -30,14 +30,14 @@ export function StatsBar({
   ].filter((s) => s.value > 0 || s.label === "Total");
 
   return (
-    <div className="rounded-xl border bg-card p-3">
-      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+    <div className="app-card p-4">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {viewMode === "day" ? "Today" : "This Week"}
       </p>
-      <div className="grid grid-cols-2 gap-1.5">
+      <div className="grid grid-cols-2 gap-2">
         {stats.map((stat) => (
           <div key={stat.label} className="text-center">
-            <p className={`text-lg font-bold leading-tight ${stat.color}`}>
+            <p className={`text-xl font-bold leading-tight ${stat.color}`}>
               {stat.value}
             </p>
             <p className="text-xs text-muted-foreground">{stat.label}</p>

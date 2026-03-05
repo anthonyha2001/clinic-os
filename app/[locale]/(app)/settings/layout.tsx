@@ -1,6 +1,6 @@
 import { redirect } from "@/i18n/navigation";
 import type { Locale } from "@/i18n/config";
-import { getCurrentUserCached } from "@/lib/auth/getCurrentUser";
+import { getUserOrRedirectInfo } from "@/lib/auth/getCurrentUser";
 import { getTranslations } from "next-intl/server";
 
 const ALLOWED_ROLES = ["admin", "manager"] as const;
@@ -13,13 +13,19 @@ export default async function SettingsLayout({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  const user = await getCurrentUserCached();
+  const result = await getUserOrRedirectInfo();
 
-  if (!user) {
+  if ("redirectTo" in result) {
+    if (result.redirectTo === "/auth/error") {
+      return redirect({
+        href: `/auth/error?code=${result.code}`,
+        locale: locale as Locale,
+      });
+    }
     return redirect({ href: "/auth/login", locale: locale as Locale });
   }
 
-  const hasAccess = ALLOWED_ROLES.some((r) => user.roles.includes(r));
+  const hasAccess = ALLOWED_ROLES.some((r) => result.user.roles.includes(r));
   if (!hasAccess) {
     return redirect({ href: "/", locale: locale as Locale });
   }

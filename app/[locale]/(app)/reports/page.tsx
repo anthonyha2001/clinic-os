@@ -1,8 +1,16 @@
 import { redirect } from "@/i18n/navigation";
 import { setRequestLocale } from "next-intl/server";
-import { ReportsClient } from "@/components/reports/ReportsClient";
+import dynamic from "next/dynamic";
 import { getUserOrRedirectInfo } from "@/lib/auth/getCurrentUser";
 import type { Locale } from "@/i18n/config";
+
+const ReportsClient = dynamic(
+  () => import("@/components/reports/ReportsClient").then((mod) => mod.ReportsClient),
+  {
+    loading: () => <div className="h-24 animate-pulse rounded-xl bg-muted" />,
+    ssr: false,
+  }
+);
 
 export default async function ReportsPage({
   params,

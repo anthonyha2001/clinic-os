@@ -1,14 +1,10 @@
-import { redirect } from "@/i18n/navigation";
-import type { Locale } from "@/i18n/config";
+import { redirect } from "next/navigation";
 
 export default async function PoliciesRedirect({
   params,
 }: {
-  params?: Promise<{ locale: string }>;
+  params: { locale: string };
 }) {
-  const locale = (await params)?.locale ?? "en";
-  return redirect({
-    href: "/settings?section=policies",
-    locale: locale as Locale,
-  });
+  const locale = params?.locale ?? "en";
+  redirect(`/${locale}/settings?section=policies`);
 }

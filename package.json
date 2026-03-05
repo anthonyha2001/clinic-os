@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "analyze": "cross-env ANALYZE=true next build",
     "start": "next start",
     "lint": "next lint",
     "db:health": "tsx db/health-check.ts",
@@ -37,6 +38,7 @@
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.95.3",
     "drizzle-orm": "^0.45.1",
+    "jwt-decode": "^4.0.0",
     "lucide-react": "^0.575.0",
     "next": "14.2.35",
     "next-intl": "^4.8.3",
@@ -45,12 +47,15 @@
     "react": "^18",
     "react-dom": "^18",
     "recharts": "^3.7.0",
+    "resend": "^6.9.3",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^16.1.6",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "cross-env": "^10.1.0",
     "dotenv": "^17.3.1",
     "drizzle-kit": "^0.31.9",
     "eslint": "^8",

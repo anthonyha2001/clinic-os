@@ -21,9 +21,16 @@ export const GET = withAuth(async (_request, { user }) => {
     `;
     const newPatientsThisMonth = Number(rows[0]?.cnt ?? 0);
 
-    return NextResponse.json({
-      newPatientsThisMonth,
-    });
+    return NextResponse.json(
+      {
+        newPatientsThisMonth,
+      },
+      {
+        headers: {
+          "Cache-Control": "private, max-age=60, stale-while-revalidate=120",
+        },
+      }
+    );
   } catch (e) {
     console.error("GET /api/dashboard/stats error:", e);
     return NextResponse.json(

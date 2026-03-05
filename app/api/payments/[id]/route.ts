@@ -39,7 +39,9 @@ export const PATCH = withAuth(
       }
 
       // Phase 1 limitation: payment amount/allocations are immutable after creation.
-      const result = await pgClient.begin(async (tx) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sqlClient = pgClient as any;
+      const result = await sqlClient.begin(async (tx: unknown) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const sql = tx as any;
 

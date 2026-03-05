@@ -18,6 +18,13 @@ interface AppointmentFormDrawerProps {
   initialPatientId?: string;
   initialPatientName?: string;
   initialPlanItemId?: string;
+  editingAppointment?: {
+    id: string;
+    start_time?: string;
+    end_time?: string;
+    provider_id?: string;
+    notes?: string | null;
+  } | null;
   providers?: Record<string, unknown>[];
   onClose: () => void;
   onSuccess: () => void;
@@ -69,6 +76,7 @@ export function AppointmentFormDrawer({
   initialPatientId,
   initialPatientName,
   initialPlanItemId,
+  editingAppointment,
   providers: providersProp,
   onClose,
   onSuccess,
@@ -96,18 +104,29 @@ export function AppointmentFormDrawer({
   const [showPlanSection, setShowPlanSection] = useState(!!initialPlanItemId);
   const [plansLoading, setPlansLoading] = useState(false);
 
-  const defaultDate = initialDate ?? new Date();
+  const defaultDate = editingAppointment?.start_time
+    ? new Date(editingAppointment.start_time)
+    : initialDate ?? new Date();
   const providersList =
     providersProp && providersProp.length > 0
       ? (providersProp as unknown as ProviderOption[])
       : providersFromApi;
 
   const [form, setForm] = useState({
-    provider_id: initialProviderId ?? "",
+    provider_id: editingAppointment?.provider_id ?? initialProviderId ?? "",
     service_id: "",
     start_time: formatDateTimeLocal(defaultDate),
-    duration_minutes: 30,
-    notes: "",
+    duration_minutes: editingAppointment?.start_time && editingAppointment?.end_time
+      ? Math.max(
+          5,
+          Math.round(
+            (new Date(editingAppointment.end_time).getTime() -
+              new Date(editingAppointment.start_time).getTime()) /
+              60000
+          )
+        )
+      : 30,
+    notes: editingAppointment?.notes ?? "",
   });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -141,6 +160,28 @@ export function AppointmentFormDrawer({
   useEffect(() => {
     if (initialProviderId) setForm((f) => ({ ...f, provider_id: initialProviderId }));
   }, [initialProviderId]);
+  useEffect(() => {
+    if (!editingAppointment) return;
+    setForm((f) => ({
+      ...f,
+      provider_id: editingAppointment.provider_id ?? f.provider_id,
+      start_time: editingAppointment.start_time
+        ? formatDateTimeLocal(new Date(editingAppointment.start_time))
+        : f.start_time,
+      duration_minutes:
+        editingAppointment.start_time && editingAppointment.end_time
+          ? Math.max(
+              5,
+              Math.round(
+                (new Date(editingAppointment.end_time).getTime() -
+                  new Date(editingAppointment.start_time).getTime()) /
+                  60000
+              )
+            )
+          : f.duration_minutes,
+      notes: editingAppointment.notes ?? "",
+    }));
+  }, [editingAppointment]);
 
   useEffect(() => {
     fetch("/api/settings", { credentials: "include" })
@@ -213,9 +254,9 @@ export function AppointmentFormDrawer({
   async function handleSubmit() {
     if (!selectedPatient) { setError("Please select a patient"); return; }
     if (!form.provider_id) { setError("Please select a provider"); return; }
-    if (!form.service_id) { setError("Please select a service"); return; }
+    if (!editingAppointment && !form.service_id) { setError("Please select a service"); return; }
     if (!form.start_time) { setError("Please select a date and time"); return; }
-    if (showPlanSection && selectedPlanId && !selectedPlanItemId) {
+    if (!editingAppointment && showPlanSection && selectedPlanId && !selectedPlanItemId) {
       setError("Please select a plan item or unlink the plan");
       return;
     }
@@ -224,22 +265,35 @@ export function AppointmentFormDrawer({
     setError(null);
 
     const startTime = new Date(form.start_time);
-    const res = await fetch("/api/appointments", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({
-        patient_id: selectedPatient.id,
-        provider_id: form.provider_id,
-        start_time: startTime.toISOString(),
-        notes: form.notes || undefined,
-        lines: [{
-          service_id: form.service_id,
-          quantity: 1,
-          plan_item_id: selectedPlanItemId || undefined,
-        }],
-      }),
-    });
+    const endTime = new Date(startTime.getTime() + form.duration_minutes * 60000);
+    const res = editingAppointment
+      ? await fetch(`/api/appointments/${editingAppointment.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            provider_id: form.provider_id,
+            start_time: startTime.toISOString(),
+            end_time: endTime.toISOString(),
+            notes: form.notes || null,
+          }),
+        })
+      : await fetch("/api/appointments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            patient_id: selectedPatient.id,
+            provider_id: form.provider_id,
+            start_time: startTime.toISOString(),
+            notes: form.notes || undefined,
+            lines: [{
+              service_id: form.service_id,
+              quantity: 1,
+              plan_item_id: selectedPlanItemId || undefined,
+            }],
+          }),
+        });
 
     if (res.status === 409) {
       setError("This time slot conflicts with an existing appointment for this provider.");
@@ -248,7 +302,7 @@ export function AppointmentFormDrawer({
     }
     if (!res.ok) {
       const data = await res.json();
-      setError(data.error ?? "Failed to create appointment.");
+      setError(data.error ?? (editingAppointment ? "Failed to update appointment." : "Failed to create appointment."));
       setLoading(false);
       return;
     }
@@ -272,7 +326,9 @@ export function AppointmentFormDrawer({
       <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} aria-hidden />
       <div className="fixed inset-y-0 end-0 z-50 flex w-full max-w-md flex-col bg-card shadow-2xl">
         <div className="flex items-center justify-between border-b px-6 py-4">
-          <h2 className="text-lg font-semibold">New Appointment</h2>
+          <h2 className="text-lg font-semibold">
+            {editingAppointment ? "Reschedule Appointment" : "New Appointment"}
+          </h2>
           <button type="button" onClick={onClose} className="p-1 text-muted-foreground hover:text-foreground">
             <X className="size-5" />
           </button>
@@ -341,7 +397,7 @@ export function AppointmentFormDrawer({
           </div>
 
           {/* Link to Treatment Plan — only show if patient selected */}
-          {selectedPatient && (
+          {selectedPatient && !editingAppointment && (
             <div className="rounded-xl border overflow-hidden">
               <button
                 type="button"
@@ -420,18 +476,20 @@ export function AppointmentFormDrawer({
           )}
 
           {/* Service */}
-          <div>
-            <label className="mb-1 block text-sm font-medium">Service</label>
-            <select value={form.service_id} onChange={(e) => handleServiceChange(e.target.value)}
-              className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20">
-              <option value="">Select service...</option>
-              {(Array.isArray(services) ? services : []).map((s) => (
-                <option key={s.id} value={s.id}>
-                  {serviceLabel(s)} ({(s.default_duration_minutes ?? s.defaultDurationMinutes) ?? 30}min)
-                </option>
-              ))}
-            </select>
-          </div>
+          {!editingAppointment && (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Service</label>
+              <select value={form.service_id} onChange={(e) => handleServiceChange(e.target.value)}
+                className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20">
+                <option value="">Select service...</option>
+                {(Array.isArray(services) ? services : []).map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {serviceLabel(s)} ({(s.default_duration_minutes ?? s.defaultDurationMinutes) ?? 30}min)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Date & Time */}
           <div>
@@ -467,7 +525,13 @@ export function AppointmentFormDrawer({
           </button>
           <button type="button" onClick={handleSubmit} disabled={loading}
             className="flex-1 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60">
-            {loading ? "Booking..." : "Book Appointment"}
+            {loading
+              ? editingAppointment
+                ? "Saving..."
+                : "Booking..."
+              : editingAppointment
+                ? "Save Changes"
+                : "Book Appointment"}
           </button>
         </div>
       </div>

@@ -14,23 +14,34 @@ export function AtRiskPatients({
   const router = useRouter();
 
   return (
-    <div className="rounded-xl border bg-card p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold">Patients Needing Attention</h2>
-        {patients.length > 0 && (
-          <span className="text-xs font-bold text-red-600">
-            {patients.length}
-          </span>
-        )}
+    <div className="app-card">
+      <div className="flex items-center justify-between mb-4 pb-3 border-b border-border/60">
+        <h2 className="text-sm font-semibold text-foreground">Patients Needing Attention</h2>
+        <div className="text-xs">
+          {patients.length > 0 && (
+            <span className="text-xs font-semibold text-foreground">
+              {patients.length}
+            </span>
+          )}
+        </div>
       </div>
 
       {patients.length === 0 ? (
-        <p className="text-xs text-green-600 text-center py-3 flex items-center justify-center gap-1">
-          <CheckCircle className="size-3.5 inline-block" />
-          No at-risk patients
-        </p>
+        <div className="flex flex-col items-center justify-center py-8 gap-3">
+          <div className="h-12 w-12 rounded-2xl border border-border/60 bg-muted/40 flex items-center justify-center">
+            <CheckCircle className="size-5 text-muted-foreground/40" strokeWidth={1.5} />
+          </div>
+          <div className="text-center">
+            <p className="text-sm font-medium text-foreground">
+              No follow-ups needed
+            </p>
+            <p className="text-xs text-muted-foreground/60 mt-0.5">
+              All patients are up to date
+            </p>
+          </div>
+        </div>
       ) : (
-        <div className="space-y-1.5">
+        <div>
           {patients.slice(0, 5).map((patient) => {
             const lastSeen = Number(
               patient.days_since_last_visit ?? 0
@@ -41,7 +52,7 @@ export function AtRiskPatients({
                 onClick={() =>
                   router.push(`/${locale}/patients/${patient.id}`)
                 }
-                className="flex items-center justify-between gap-2 cursor-pointer hover:bg-muted/50 px-1 py-1 rounded transition-colors"
+                className="flex items-center justify-between gap-3 py-2.5 border-b border-border/50 last:border-0 cursor-pointer hover:bg-muted/30 -mx-1 px-1 rounded transition-colors duration-150"
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
@@ -49,17 +60,17 @@ export function AtRiskPatients({
                     router.push(`/${locale}/patients/${patient.id}`);
                 }}
               >
-                <div className="min-w-0">
-                  <p className="text-xs font-medium truncate">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-foreground truncate">
                     {patient.first_name as string}{" "}
                     {patient.last_name as string}
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-[11px] text-muted-foreground/70 mt-0.5">
                     {patient.phone as string}
                   </p>
                 </div>
-                <p className="text-xs text-red-600 font-medium shrink-0">
-                  {lastSeen}d ago
+                <p className="text-xs text-muted-foreground font-mono tabular-nums shrink-0">
+                  {lastSeen}d
                 </p>
               </div>
             );
@@ -67,7 +78,7 @@ export function AtRiskPatients({
           {patients.length > 5 && (
             <button
               onClick={() => router.push(`/${locale}/patients`)}
-              className="text-xs text-primary hover:underline w-full text-center pt-1"
+              className="text-xs font-medium text-[hsl(213,87%,53%)] hover:text-[hsl(213,87%,45%)] transition-colors duration-150 w-full text-center pt-2 block"
               type="button"
             >
               +{patients.length - 5} more

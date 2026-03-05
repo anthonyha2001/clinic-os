@@ -1,18 +1,21 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Download, Plus, Printer } from "lucide-react";
 import { useCurrency } from "@/lib/context/CurrencyContext";
 import { QuickPayDrawer } from "./QuickPayDrawer";
 import { InvoicePrintPreview } from "./InvoicePrintPreview";
+import { SearchInput } from "@/components/ui/SearchInput";
+import { useFetch } from "@/hooks/useFetch";
+import { apiCache } from "@/lib/cache/apiCache";
 
 const STATUS_COLORS: Record<string, string> = {
-  draft: "bg-gray-100 text-gray-600",
-  issued: "bg-yellow-100 text-yellow-700",
-  partially_paid: "bg-orange-100 text-orange-700",
-  paid: "bg-green-100 text-green-700",
-  voided: "bg-red-100 text-red-700",
+  draft: "app-badge app-badge-neutral",
+  issued: "app-badge app-badge-medium",
+  partially_paid: "app-badge app-badge-medium",
+  paid: "app-badge app-badge-low",
+  voided: "app-badge app-badge-high",
 };
 
 const STATUS_OPTIONS = [
@@ -51,7 +54,6 @@ export function BillingClient({
     totalUnpaidAmount: 0,
     totalUnpaidCount: 0,
   });
-  const [loading, setLoading] = useState(true);
 
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [providerFilter, setProviderFilter] = useState("all");
@@ -64,42 +66,51 @@ export function BillingClient({
 
   const [quickPayInvoice, setQuickPayInvoice] = useState<Invoice | null>(null);
   const [printInvoice, setPrintInvoice] = useState<Invoice | null>(null);
-
-  const fetchInvoices = useCallback(async () => {
-    setLoading(true);
+  const invoiceUrl = useMemo(() => {
     const params = new URLSearchParams();
     if (statusFilter !== "all") params.set("status", statusFilter);
     if (providerFilter !== "all") params.set("provider_id", providerFilter);
     if (startDate) params.set("start_date", startDate);
     if (endDate) params.set("end_date", endDate);
-    const res = await fetch(`/api/invoices?${params}`);
-    const data = await res.json();
-    setInvoices(data.invoices ?? data ?? []);
-    setLoading(false);
+    return `/api/invoices?${params.toString()}`;
   }, [statusFilter, providerFilter, startDate, endDate]);
 
+  const {
+    data: invoicesData,
+    loading,
+    refetch: refetchInvoices,
+  } = useFetch<Invoice[] | { invoices?: Invoice[] }>(invoiceUrl, {
+    ttl: 30_000,
+    initialData: [],
+  });
+  const { data: unpaidData } = useFetch<{
+    summary?: { totalUnpaidAmount?: number; totalUnpaidCount?: number };
+  }>("/api/reports/unpaid", { ttl: 30_000, initialData: { summary: {} } });
+  const { data: providersData } = useFetch<Record<string, unknown>[] | { providers?: Record<string, unknown>[] }>(
+    "/api/providers",
+    { ttl: 300_000, initialData: [] }
+  );
+
   useEffect(() => {
-    Promise.all([
-      fetchInvoices(),
-      fetch("/api/reports/unpaid")
-        .then((r) => r.json())
-        .then((d) =>
-          setSummary({
-            totalUnpaidAmount: d.summary?.totalUnpaidAmount ?? 0,
-            totalUnpaidCount: d.summary?.totalUnpaidCount ?? 0,
-          })
-        )
-        .catch(() =>
-          setSummary({ totalUnpaidAmount: 0, totalUnpaidCount: 0 })
-        ),
-      fetch("/api/providers")
-        .then((r) => r.json())
-        .then((d) => {
-          const raw = d?.providers ?? d;
-          setProviders(Array.isArray(raw) ? raw : []);
-        }),
-    ]);
-  }, [fetchInvoices]);
+    const rawInvoices = Array.isArray(invoicesData)
+      ? invoicesData
+      : invoicesData?.invoices ?? [];
+    setInvoices(Array.isArray(rawInvoices) ? rawInvoices : []);
+  }, [invoicesData]);
+
+  useEffect(() => {
+    setSummary({
+      totalUnpaidAmount: unpaidData?.summary?.totalUnpaidAmount ?? 0,
+      totalUnpaidCount: unpaidData?.summary?.totalUnpaidCount ?? 0,
+    });
+  }, [unpaidData]);
+
+  useEffect(() => {
+    const raw = Array.isArray(providersData)
+      ? providersData
+      : providersData?.providers ?? [];
+    setProviders(Array.isArray(raw) ? raw : []);
+  }, [providersData]);
 
   const filtered = invoices.filter((inv) => {
     if (!search) return true;
@@ -143,7 +154,9 @@ export function BillingClient({
     );
     setSelectedIds(new Set());
     setBulkLoading(false);
-    fetchInvoices();
+    apiCache.invalidate("/api/invoices?");
+    apiCache.invalidate("/api/reports/unpaid");
+    refetchInvoices();
   }
 
   function exportCSV() {
@@ -191,11 +204,11 @@ export function BillingClient({
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="list-page-header">
         <div>
-          <h1 className="text-2xl font-bold">Billing</h1>
+          <h1 className="list-page-title">Billing</h1>
           {!hideFinancialSummary && (
-            <p className="text-sm text-muted-foreground mt-0.5">
+            <p className="list-page-subtitle">
               {summary.totalUnpaidCount} unpaid ·{" "}
               <span className="text-orange-600 font-medium">
                 {format(summary.totalUnpaidAmount)}
@@ -207,14 +220,14 @@ export function BillingClient({
         <div className="flex gap-2">
           <button
             onClick={exportCSV}
-            className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted transition-colors flex items-center gap-1.5"
+            className="app-btn-secondary flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors hover:bg-muted"
           >
             <Download className="size-4 inline-block" />
             Export CSV
           </button>
           <button
             onClick={() => router.push(`/${locale}/billing/new`)}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 flex items-center gap-1.5"
+            className="app-btn-primary flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors"
           >
             <Plus className="size-4 inline-block" />
             New Invoice
@@ -260,12 +273,11 @@ export function BillingClient({
       </div>
 
       <div className="flex flex-wrap gap-3 items-center">
-        <input
-          type="text"
-          placeholder="Search invoice # or patient..."
+        <SearchInput
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 w-60"
+          onChange={setSearch}
+          placeholder="Search invoice # or patient..."
+          className="w-64"
         />
         <select
           value={providerFilter}
@@ -337,11 +349,11 @@ export function BillingClient({
         </div>
       )}
 
-      <div className="rounded-xl border bg-card overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="app-table-wrap">
+        <table className="app-table text-sm">
           <thead>
-            <tr className="border-b bg-muted/50">
-              <th className="px-4 py-3 w-10">
+            <tr>
+              <th className="px-5 py-3 w-10">
                 <input
                   type="checkbox"
                   checked={
@@ -351,28 +363,28 @@ export function BillingClient({
                   className="rounded"
                 />
               </th>
-              <th className="px-4 py-3 text-start font-medium text-muted-foreground">
+              <th className="px-5 py-3 text-start">
                 Invoice
               </th>
-              <th className="px-4 py-3 text-start font-medium text-muted-foreground">
+              <th className="px-5 py-3 text-start">
                 Patient
               </th>
-              <th className="px-4 py-3 text-start font-medium text-muted-foreground">
+              <th className="px-5 py-3 text-start">
                 Provider
               </th>
-              <th className="px-4 py-3 text-start font-medium text-muted-foreground">
+              <th className="px-5 py-3 text-start">
                 Date
               </th>
-              <th className="px-4 py-3 text-end font-medium text-muted-foreground">
+              <th className="px-5 py-3 text-end">
                 Total
               </th>
-              <th className="px-4 py-3 text-end font-medium text-muted-foreground">
+              <th className="px-5 py-3 text-end">
                 Balance
               </th>
-              <th className="px-4 py-3 text-start font-medium text-muted-foreground">
+              <th className="px-5 py-3 text-start">
                 Status
               </th>
-              <th className="px-4 py-3 text-start font-medium text-muted-foreground">
+              <th className="px-5 py-3 text-start">
                 Actions
               </th>
             </tr>
@@ -380,9 +392,9 @@ export function BillingClient({
           <tbody>
             {loading ? (
               [...Array(6)].map((_, i) => (
-                <tr key={i} className="border-b animate-pulse">
+                <tr key={i} className="animate-pulse">
                   {[...Array(9)].map((__, j) => (
-                    <td key={j} className="px-4 py-3">
+                    <td key={j} className="px-5 py-3.5">
                       <div className="h-4 bg-muted rounded w-20" />
                     </td>
                   ))}
@@ -392,7 +404,7 @@ export function BillingClient({
               <tr>
                 <td
                   colSpan={9}
-                  className="px-4 py-12 text-center text-muted-foreground"
+                  className="px-5 py-12 text-center text-muted-foreground"
                 >
                   {hasActiveFilters
                     ? "No invoices match your filters."
@@ -412,7 +424,7 @@ export function BillingClient({
                     className={`border-b transition-colors ${overdue ? "bg-orange-50/40 dark:bg-orange-950/10" : "hover:bg-muted/30"} ${selectedIds.has(inv.id) ? "bg-primary/5" : ""}`}
                   >
                     <td
-                      className="px-4 py-3"
+                      className="px-5 py-3.5"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <input
@@ -423,7 +435,7 @@ export function BillingClient({
                       />
                     </td>
                     <td
-                      className="px-4 py-3 cursor-pointer"
+                      className="px-5 py-3.5 cursor-pointer"
                       onClick={() =>
                         router.push(`/${locale}/billing/${inv.id}`)
                       }
@@ -438,7 +450,7 @@ export function BillingClient({
                       )}
                     </td>
                     <td
-                      className="px-4 py-3 cursor-pointer"
+                      className="px-5 py-3.5 cursor-pointer"
                       onClick={() =>
                         router.push(`/${locale}/billing/${inv.id}`)
                       }
@@ -450,33 +462,31 @@ export function BillingClient({
                         {inv.patient?.phone}
                       </p>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs">
+                    <td className="px-5 py-3.5 text-muted-foreground text-xs">
                       {providerName}
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs">
+                    <td className="px-5 py-3.5 text-muted-foreground text-xs">
                       {new Date(inv.created_at).toLocaleDateString(locale, {
                         month: "short",
                         day: "numeric",
                         year: "numeric",
                       })}
                     </td>
-                    <td className="px-4 py-3 text-end">
+                    <td className="px-5 py-3.5 text-end">
                       {format(inv.total)}
                     </td>
                     <td
-                      className={`px-4 py-3 text-end font-semibold ${Number(inv.balance_due) > 0 ? "text-orange-600" : "text-green-600"}`}
+                      className={`px-5 py-3.5 text-end font-semibold ${Number(inv.balance_due) > 0 ? "text-orange-600" : "text-green-600"}`}
                     >
                       {format(inv.balance_due)}
                     </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[inv.status] ?? ""}`}
-                      >
+                    <td className="px-5 py-3.5">
+                      <span className={`${STATUS_COLORS[inv.status] ?? "app-badge app-badge-neutral"}`}>
                         {inv.status.replace("_", " ")}
                       </span>
                     </td>
                     <td
-                      className="px-4 py-3"
+                      className="px-5 py-3.5"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <div className="flex items-center gap-1.5">
@@ -504,7 +514,7 @@ export function BillingClient({
         </table>
 
         {filtered.length > 0 && (
-          <div className="px-4 py-3 border-t bg-muted/30 flex justify-between text-sm">
+          <div className="px-5 py-3 border-t bg-muted/30 flex justify-between text-sm">
             <span className="text-muted-foreground">
               {filtered.length} invoices
             </span>
@@ -532,7 +542,9 @@ export function BillingClient({
           onClose={() => setQuickPayInvoice(null)}
           onSuccess={() => {
             setQuickPayInvoice(null);
-            fetchInvoices();
+            apiCache.invalidate("/api/invoices?");
+            apiCache.invalidate("/api/reports/unpaid");
+            refetchInvoices();
           }}
         />
       )}

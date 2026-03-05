@@ -35,20 +35,26 @@ export const POST = withAuth(async (request, { user, params }) => {
 
     // Auto-invoice + plan session increment when appointment completed
     if (newStatus === "completed") {
-      const appt = appointment as Record<string, unknown>;
+      const appt = appointment as unknown as Record<string, unknown>;
+      const planItemId =
+        typeof appt.plan_item_id === "string" ? appt.plan_item_id : null;
+      const appointmentId = typeof appt.id === "string" ? appt.id : null;
+      const organizationId =
+        typeof appt.organization_id === "string" ? appt.organization_id : null;
+      const patientId = typeof appt.patient_id === "string" ? appt.patient_id : null;
       // 1. Increment plan item session count if linked
-      if (appt.plan_item_id) {
+      if (planItemId) {
         await pgClient`
           UPDATE plan_items
           SET quantity_completed = LEAST(quantity_completed + 1, quantity_total),
               updated_at = now()
-          WHERE id = ${appt.plan_item_id}
+          WHERE id = ${planItemId}
         `;
 
         // Auto-advance plan to in_progress if it was accepted
         await pgClient`
           UPDATE plans SET status = 'in_progress', updated_at = now()
-          WHERE id = (SELECT plan_id FROM plan_items WHERE id = ${appt.plan_item_id})
+          WHERE id = (SELECT plan_id FROM plan_items WHERE id = ${planItemId})
             AND status = 'accepted'
         `;
 
@@ -57,7 +63,7 @@ export const POST = withAuth(async (request, { user, params }) => {
           SELECT plan_id,
             COUNT(*) FILTER (WHERE quantity_completed < quantity_total) AS remaining
           FROM plan_items
-          WHERE plan_id = (SELECT plan_id FROM plan_items WHERE id = ${appt.plan_item_id})
+          WHERE plan_id = (SELECT plan_id FROM plan_items WHERE id = ${planItemId})
           GROUP BY plan_id
         `;
         if (planCheck && Number(planCheck.remaining) === 0) {
@@ -79,12 +85,12 @@ export const POST = withAuth(async (request, { user, params }) => {
           FROM appointment_lines al
           JOIN services s ON s.id = al.service_id
           LEFT JOIN plan_items pi ON pi.id = al.plan_item_id
-          WHERE al.appointment_id = ${appt.id}
-            AND al.organization_id = ${appt.organization_id}
+          WHERE al.appointment_id = ${appointmentId}
+            AND al.organization_id = ${organizationId}
           ORDER BY al.sequence_order ASC
         `;
 
-        if (apptLines.length > 0) {
+        if (apptLines.length > 0 && appointmentId && organizationId && patientId) {
           const lines = apptLines.map((line: Record<string, unknown>) => {
             const isPlanLinked = line.plan_item_id != null;
             const suffix = isPlanLinked
@@ -106,9 +112,9 @@ export const POST = withAuth(async (request, { user, params }) => {
           });
 
           await createInvoice({
-            orgId: appt.organization_id as string,
-            patientId: appt.patient_id as string,
-            appointmentId: appt.id as string,
+            orgId: organizationId,
+            patientId: patientId,
+            appointmentId: appointmentId,
             createdBy: user.id,
             lines,
             notes: null,
@@ -123,17 +129,23 @@ export const POST = withAuth(async (request, { user, params }) => {
     // Queue no-show followup 1 hour later
     if (newStatus === "no_show") {
       const { queueEvent } = await import("@/lib/automation/queue");
-      const appt = appointment as Record<string, unknown>;
+      const appt = appointment as unknown as Record<string, unknown>;
+      const organizationId =
+        typeof appt.organization_id === "string" ? appt.organization_id : null;
+      const appointmentId = typeof appt.id === "string" ? appt.id : null;
+      const patientId = typeof appt.patient_id === "string" ? appt.patient_id : null;
       const scheduledFor = new Date(Date.now() + 60 * 60 * 1000);
-      await queueEvent({
-        orgId: appt.organization_id as string,
-        eventType: "no_show_followup",
-        entityType: "appointment",
-        entityId: appt.id as string,
-        patientId: appt.patient_id as string,
-        payload: { appointment_id: appt.id },
-        scheduledFor,
-      });
+      if (organizationId && appointmentId && patientId) {
+        await queueEvent({
+          orgId: organizationId,
+          eventType: "no_show_followup",
+          entityType: "appointment",
+          entityId: appointmentId,
+          patientId: patientId,
+          payload: { appointment_id: appointmentId },
+          scheduledFor,
+        });
+      }
     }
 
     return NextResponse.json(appointment);

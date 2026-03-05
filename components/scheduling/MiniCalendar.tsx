@@ -32,17 +32,17 @@ export function MiniCalendar({
 
   while (cells.length % 7 !== 0) cells.push(null);
 
-  function hasAppointments(day: number) {
-    return appointments.some((a) => {
+  function getAppointmentCount(day: number) {
+    return appointments.reduce((count, a) => {
       const start = (a.start_time ?? a.startTime) as string | undefined;
-      if (!start) return false;
+      if (!start) return count;
       const d = new Date(start);
-      return (
+      const matches =
         d.getFullYear() === viewYear &&
         d.getMonth() === viewMonth &&
-        d.getDate() === day
-      );
-    });
+        d.getDate() === day;
+      return matches ? count + 1 : count;
+    }, 0);
   }
 
   function prevMonth() {
@@ -65,18 +65,18 @@ export function MiniCalendar({
   );
 
   return (
-    <div className="rounded-xl border bg-card p-3">
-      <div className="flex items-center justify-between mb-2">
+    <div className="app-card p-4">
+      <div className="mb-3 flex items-center justify-between">
         <button
           onClick={prevMonth}
-          className="text-muted-foreground hover:text-foreground text-sm px-1"
+          className="rounded-lg px-1.5 py-1 text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           <ChevronLeft className="size-4" />
         </button>
-        <span className="text-xs font-semibold">{monthLabel}</span>
+        <span className="text-xs font-semibold text-foreground">{monthLabel}</span>
         <button
           onClick={nextMonth}
-          className="text-muted-foreground hover:text-foreground text-sm px-1"
+          className="rounded-lg px-1.5 py-1 text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           <ChevronRight className="size-4" />
         </button>
@@ -93,7 +93,7 @@ export function MiniCalendar({
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-y-0.5">
+      <div className="grid grid-cols-7 gap-y-1">
         {cells.map((day, i) => {
           if (!day) return <div key={i} />;
 
@@ -107,23 +107,31 @@ export function MiniCalendar({
             viewMonth === today.getMonth() &&
             viewYear === today.getFullYear();
 
-          const hasDot = hasAppointments(day);
+          const appointmentCount = getAppointmentCount(day);
+          const dots = Math.min(3, appointmentCount);
 
           return (
             <button
               key={i}
               onClick={() => onSelectDate(new Date(viewYear, viewMonth, day))}
-              className={`relative flex items-center justify-center text-xs rounded-full w-7 h-7 mx-auto transition-colors ${
+              className={`relative mx-auto flex h-8 w-8 items-center justify-center rounded-lg text-xs transition-colors ${
                 isSelected
-                  ? "bg-primary text-primary-foreground font-semibold"
+                  ? "bg-primary/12 text-primary font-semibold"
                   : isTodayCell
-                    ? "border border-primary text-primary font-semibold"
-                    : "hover:bg-muted text-foreground"
+                    ? "border border-primary/40 text-primary font-semibold"
+                    : "text-foreground hover:bg-muted"
               }`}
             >
               {day}
-              {hasDot && !isSelected && (
-                <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-primary" />
+              {dots > 0 && (
+                <span className="absolute bottom-0.5 left-1/2 flex -translate-x-1/2 items-center gap-0.5">
+                  {Array.from({ length: dots }).map((_, idx) => (
+                    <span
+                      key={idx}
+                      className="h-1 w-1 rounded-full bg-primary"
+                    />
+                  ))}
+                </span>
               )}
             </button>
           );

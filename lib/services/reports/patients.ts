@@ -10,9 +10,10 @@ function safeDivide(a: number, b: number): number {
   return b === 0 ? 0 : a / b;
 }
 
-function ageGroup(dob: string | Date | null): string {
-  if (!dob) return "Unknown";
+function ageGroup(dob: string | Date | null): string | null {
+  if (!dob) return null;
   const d = new Date(dob);
+  if (Number.isNaN(d.getTime())) return null;
   const now = new Date();
   const age = Math.floor(
     (now.getTime() - d.getTime()) / (365.25 * 24 * 60 * 60 * 1000)
@@ -24,8 +25,20 @@ function ageGroup(dob: string | Date | null): string {
   return "60+";
 }
 
+function normalizeGender(gender: unknown): "male" | "female" | "other" | null {
+  if (typeof gender !== "string") return null;
+  const g = gender.trim().toLowerCase();
+  if (!g) return null;
+  if (g === "male" || g === "m") return "male";
+  if (g === "female" || g === "f") return "female";
+  if (g === "other") return "other";
+  return null;
+}
+
 export async function getPatientsReport(input: GetPatientsReportInput) {
   const { orgId, startDate, endDate } = input;
+  let newPatients = 0;
+  let returningPatients = 0;
 
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
@@ -61,6 +74,28 @@ export async function getPatientsReport(input: GetPatientsReportInput) {
   const patientIdsInRange = [
     ...new Set(appointmentsInRange.map((r) => String(r.patient_id))),
   ];
+
+  // Demographics should represent all patients in the organization,
+  // not only patients who visited in the selected period.
+  const patientRows = await pgClient`
+    SELECT id, date_of_birth, gender
+    FROM patients
+    WHERE organization_id = ${orgId}
+  `;
+  const byGenderMap = new Map<string, number>();
+  const byAgeGroupMap = new Map<string, number>();
+  for (const row of patientRows) {
+    const gender = normalizeGender(row.gender);
+    const ag = ageGroup(row.date_of_birth as string | Date | null);
+    if (gender) {
+      byGenderMap.set(gender, (byGenderMap.get(gender) ?? 0) + 1);
+    }
+    if (ag) {
+      byAgeGroupMap.set(ag, (byAgeGroupMap.get(ag) ?? 0) + 1);
+    }
+  }
+  const totalPatients = patientRows.length;
+
   if (patientIdsInRange.length === 0) {
     const inactiveCount = await pgClient`
       SELECT COUNT(*)::int AS cnt
@@ -73,6 +108,7 @@ export async function getPatientsReport(input: GetPatientsReportInput) {
     `;
     return {
       summary: {
+        total_patients: totalPatients,
         new_patients: newPatients,
         patients_created_in_range: patientsCreatedCount,
         returning_patients: 0,
@@ -80,13 +116,16 @@ export async function getPatientsReport(input: GetPatientsReportInput) {
         inactive_patients: Number(inactiveCount[0]?.cnt ?? 0),
       },
       new_by_month: [],
-      by_gender: [],
-      by_age_group: [],
+      by_gender: Array.from(byGenderMap.entries()).map(([gender, count]) => ({
+        gender,
+        count,
+      })),
+      by_age_group: Array.from(byAgeGroupMap.entries()).map(
+        ([age_group, count]) => ({ age_group, count })
+      ),
     };
   }
 
-  let newPatients = 0;
-  let returningPatients = 0;
   const newByMonthMap = new Map<
     string,
     { new_count: number; returning_count: number }
@@ -125,24 +164,6 @@ export async function getPatientsReport(input: GetPatientsReportInput) {
     }
   }
 
-  const patientRows = await pgClient`
-    SELECT id, date_of_birth, gender
-    FROM patients
-    WHERE organization_id = ${orgId}
-  `;
-  const patientIdSet = new Set(patientIdsInRange);
-  const rowsInRange = patientRows.filter((row) =>
-    patientIdSet.has(String(row.id))
-  );
-  const byGenderMap = new Map<string, number>();
-  const byAgeGroupMap = new Map<string, number>();
-  for (const row of rowsInRange) {
-    const gender = (row.gender as string) || "unknown";
-    const ag = ageGroup(row.date_of_birth as string | Date | null);
-    byGenderMap.set(gender, (byGenderMap.get(gender) ?? 0) + 1);
-    byAgeGroupMap.set(ag, (byAgeGroupMap.get(ag) ?? 0) + 1);
-  }
-
   const inactiveRows = await pgClient`
     SELECT COUNT(*)::int AS cnt
     FROM patients p
@@ -167,7 +188,7 @@ export async function getPatientsReport(input: GetPatientsReportInput) {
     }));
 
   const by_gender = Array.from(byGenderMap.entries()).map(([gender, count]) => ({
-    gender: gender || "unknown",
+    gender,
     count,
   }));
 
@@ -177,6 +198,7 @@ export async function getPatientsReport(input: GetPatientsReportInput) {
 
   return {
     summary: {
+      total_patients: totalPatients,
       new_patients: newPatients,
       patients_created_in_range: patientsCreatedCount,
       returning_patients: returningPatients,

@@ -3,11 +3,29 @@ import { withAuth } from "@/lib/auth";
 import { pgClient } from "@/db/index";
 
 // GET — today's waiting room
-export const GET = withAuth(async (_request, { user }) => {
+export const GET = withAuth(async (request, { user }) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
+  const lite = new URL(request.url).searchParams.get("lite") === "1";
+
+  if (lite) {
+    const raw = await pgClient`
+      SELECT
+        ci.id,
+        ci.appointment_id,
+        ci.status,
+        ci.checked_in_at
+      FROM appointment_checkins ci
+      JOIN appointments a ON a.id = ci.appointment_id
+      WHERE ci.organization_id = ${user.organizationId}
+        AND a.start_time >= ${today.toISOString()}
+        AND a.start_time < ${tomorrow.toISOString()}
+      ORDER BY ci.checked_in_at DESC
+    `;
+    return NextResponse.json(raw);
+  }
 
   const raw = await pgClient`
     SELECT DISTINCT ON (a.id)

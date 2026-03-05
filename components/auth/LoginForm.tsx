@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { createBrowserClient } from "@supabase/ssr";
 
 interface LoginFormProps {
   errorParam?: string;
@@ -25,6 +24,7 @@ export function LoginForm({ errorParam }: LoginFormProps) {
 
     setDebug(`URL: ${SUPABASE_URL} | Email: ${email.trim()} | Pass length: ${password.length}`);
 
+    const { createBrowserClient } = await import("@supabase/ssr");
     const supabase = createBrowserClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     const { data, error: signInError } = await supabase.auth.signInWithPassword({

@@ -5,7 +5,7 @@ export async function sendNoShowFollowups(orgId?: string) {
   // Find appointments that ended 1+ hours ago, status is no_show, 
   // and no followup sent yet
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-  const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
+  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
   const appointments = await pgClient`
     SELECT
@@ -25,7 +25,7 @@ export async function sendNoShowFollowups(orgId?: string) {
     JOIN organizations org ON org.id = a.organization_id
     WHERE a.status = 'no_show'
       AND a.start_time <= ${oneHourAgo.toISOString()}
-      AND a.start_time >= ${sixHoursAgo.toISOString()}
+      AND a.start_time >= ${twentyFourHoursAgo.toISOString()}
       AND a.noshow_sent_at IS NULL
       AND p.phone IS NOT NULL
       ${orgId ? pgClient` AND a.organization_id = ${orgId}` : pgClient``}

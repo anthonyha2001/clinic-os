@@ -19,7 +19,14 @@ export const GET = withAuth(async (request, { user }) => {
       limit,
       offset,
     });
-    return NextResponse.json({ patients, total });
+    return NextResponse.json(
+      { patients, total },
+      {
+        headers: {
+          "Cache-Control": "private, max-age=30, stale-while-revalidate=60",
+        },
+      }
+    );
   } catch (e) {
     console.error("GET /api/patients error:", e);
     return NextResponse.json(

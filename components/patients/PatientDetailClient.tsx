@@ -91,6 +91,21 @@ type Stats = {
   unpaid_balance: number;
 };
 
+function parseDateOfBirth(value: string) {
+  const dateOnly = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnly) {
+    const year = Number(dateOnly[1]);
+    const month = Number(dateOnly[2]) - 1;
+    const day = Number(dateOnly[3]);
+    return new Date(year, month, day);
+  }
+  return new Date(value);
+}
+
+function formatDateOfBirth(value: string, locale: string) {
+  return parseDateOfBirth(value).toLocaleDateString(locale);
+}
+
 function normalizePatientFromApi(raw: Record<string, unknown> | null): Patient | null {
   if (!raw) return null;
   return {
@@ -99,7 +114,7 @@ function normalizePatientFromApi(raw: Record<string, unknown> | null): Patient |
     last_name: (raw.last_name ?? raw.lastName) as string,
     phone: (raw.phone as string) ?? "",
     phone_secondary: (raw.phone_secondary ?? raw.phoneSecondary) as string | undefined,
-    email: (raw.email as string) | undefined,
+    email: raw.email as string | undefined,
     date_of_birth: (raw.date_of_birth ?? raw.dateOfBirth) as string | undefined,
     gender: (raw.gender as string) | undefined,
     address: (raw.address as string) | undefined,
@@ -330,8 +345,17 @@ export function PatientDetailClient({
   }
 
   function getAge(dob: string) {
-    const diff = Date.now() - new Date(dob).getTime();
-    return Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000));
+    const birth = parseDateOfBirth(dob);
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    if (
+      monthDiff < 0 ||
+      (monthDiff === 0 && today.getDate() < birth.getDate())
+    ) {
+      age -= 1;
+    }
+    return age;
   }
 
   const initials = patient ? `${patient.first_name[0] ?? ""}${patient.last_name[0] ?? ""}`.toUpperCase() : "";
@@ -475,7 +499,7 @@ export function PatientDetailClient({
           {patient.date_of_birth && (
             <span>
               <Cake className="size-4 inline-block" />
-              {new Date(patient.date_of_birth).toLocaleDateString(locale)} (
+              {formatDateOfBirth(patient.date_of_birth, locale)} (
               {getAge(patient.date_of_birth)}y)
             </span>
           )}
@@ -553,7 +577,7 @@ export function PatientDetailClient({
                   {
                     label: "Date of Birth",
                     value: patient.date_of_birth
-                      ? new Date(patient.date_of_birth).toLocaleDateString(locale)
+                      ? formatDateOfBirth(patient.date_of_birth, locale)
                       : undefined,
                   },
                   { label: "Gender", value: patient.gender },

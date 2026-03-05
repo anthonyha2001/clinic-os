@@ -57,13 +57,20 @@ export const GET = withAuth({ permissions: ["reports.view"] }, async (request, {
       };
     });
 
-    return NextResponse.json({
-      invoices,
-      summary: {
-        totalUnpaidAmount: data.summary.totalUnpaidAmount,
-        totalUnpaidCount: data.summary.totalUnpaidCount,
+    return NextResponse.json(
+      {
+        invoices,
+        summary: {
+          totalUnpaidAmount: data.summary.totalUnpaidAmount,
+          totalUnpaidCount: data.summary.totalUnpaidCount,
+        },
       },
-    });
+      {
+        headers: {
+          "Cache-Control": "private, max-age=30, stale-while-revalidate=60",
+        },
+      }
+    );
   } catch (e) {
     console.error("GET /api/reports/unpaid error:", e);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

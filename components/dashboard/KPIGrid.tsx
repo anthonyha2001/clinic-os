@@ -5,8 +5,8 @@ import { useCurrency } from "@/lib/context/CurrencyContext";
 import {
   Calendar,
   DollarSign,
-  CheckCircle,
-  AlertTriangle,
+  TrendingUp,
+  AlertCircle,
   UserPlus,
 } from "lucide-react";
 
@@ -37,91 +37,84 @@ export function KPIGrid({
   newPatientsThisMonth,
 }: KPIGridProps) {
   const { format } = useCurrency();
+
   const cards = [
     {
       label: "Today's Appointments",
       value: todayTotal,
-      sub: `${confirmed} confirmed · ${scheduled} pending · ${completed} done`,
-      color: "border-blue-200 bg-blue-50 dark:bg-blue-950/30",
-      valueColor: "text-blue-700 dark:text-blue-400",
-      icon: <Calendar size={16} />,
+      sub: `${confirmed + scheduled} upcoming · ${completed} completed`,
+      icon: Calendar,
+      valueClass: "text-foreground",
+      urgent: false,
     },
     {
       label: "Outstanding Balance",
       value: format(totalUnpaid),
-      sub: `${unpaidCount} unpaid invoices`,
-      color:
-        unpaidCount > 0
-          ? "border-orange-200 bg-orange-50 dark:bg-orange-950/30"
-          : "border-green-200 bg-green-50 dark:bg-green-950/30",
-      valueColor:
-        unpaidCount > 0
-          ? "text-orange-700 dark:text-orange-400"
-          : "text-green-700",
-      icon: <DollarSign size={16} />,
+      sub: unpaidCount > 0 ? `${unpaidCount} unpaid invoices` : "All invoices settled",
+      icon: DollarSign,
+      valueClass: "text-foreground",
+      urgent: unpaidCount > 0,
+      urgentSub: unpaidCount > 0,
     },
     {
       label: "Completion Rate",
       value: `${completionRate}%`,
-      sub: `${noShowRate}% no-show rate this month`,
-      color:
-        completionRate >= 80
-          ? "border-green-200 bg-green-50 dark:bg-green-950/30"
-          : "border-yellow-200 bg-yellow-50 dark:bg-yellow-950/30",
-      valueColor:
-        completionRate >= 80
-          ? "text-green-700 dark:text-green-400"
-          : "text-yellow-700",
-      icon: <CheckCircle size={16} />,
+      sub: `${noShowRate}% no-show rate · this month`,
+      icon: TrendingUp,
+      valueClass: "text-foreground",
+      urgent: completionRate < 60,
     },
     {
       label: "At-Risk Patients",
       value: criticalCount,
       sub:
         criticalCount === 0
-          ? "No critical patients"
-          : "Need immediate follow-up",
-      color:
-        criticalCount > 0
-          ? "border-red-200 bg-red-50 dark:bg-red-950/30"
-          : "border-green-200 bg-green-50 dark:bg-green-950/30",
-      valueColor:
-        criticalCount > 0
-          ? "text-red-700 dark:text-red-400"
-          : "text-green-700",
-      icon: <AlertTriangle size={16} />,
+          ? "No follow-ups needed"
+          : `${criticalCount} require follow-up`,
+      icon: AlertCircle,
+      valueClass: "text-foreground",
+      urgent: criticalCount > 0,
     },
     {
       label: "New Patients",
       value: newPatientsThisMonth,
       sub: "Registered this month",
-      color: "border-purple-200 bg-purple-50 dark:bg-purple-950/30",
-      valueColor: "text-purple-700 dark:text-purple-400",
-      icon: <UserPlus size={16} />,
+      icon: UserPlus,
+      valueClass: "text-foreground",
+      urgent: false,
     },
   ];
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-      {cards.map((card) => (
-        <div
-          key={card.label}
-          className={`rounded-xl border p-3 space-y-1 ${card.color}`}
-        >
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-muted-foreground">
-              {card.label}
+      {cards.map((card) => {
+        const Icon = card.icon;
+        return (
+          <div
+            key={card.label}
+            className="app-card app-card-hover flex flex-col justify-between min-h-[140px]"
+          >
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <p className="text-xs font-medium text-muted-foreground leading-tight pt-0.5">
+                {card.label}
+              </p>
+              <div className="icon-container">
+                <Icon className="size-4 text-brand" strokeWidth={1.5} />
+              </div>
+            </div>
+
+            <div>
+              <p className={`text-[2rem] font-semibold tracking-tight leading-none ${card.valueClass}`}>
+                {card.value}
+              </p>
+            </div>
+
+            <p className="text-[11px] text-muted-foreground/70 leading-tight">
+              {card.sub}
             </p>
-            <span className="text-muted-foreground shrink-0">{card.icon}</span>
           </div>
-          <p className={`text-2xl font-bold ${card.valueColor}`}>
-            {card.value}
-          </p>
-          <p className="text-xs text-muted-foreground leading-tight">
-            {card.sub}
-          </p>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

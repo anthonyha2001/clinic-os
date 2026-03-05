@@ -1,17 +1,20 @@
 "use client";
 
 import { useCurrency } from "@/lib/context/CurrencyContext";
-import { useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Download, User, Stethoscope } from "lucide-react";
 import { PlanDetailDrawer } from "./PlanDetailDrawer";
 import { NewPlanDrawer } from "./NewPlanDrawer";
+import { SearchInput } from "@/components/ui/SearchInput";
+import { useFetch } from "@/hooks/useFetch";
+import { apiCache } from "@/lib/cache/apiCache";
 
 const STATUS_COLORS: Record<string, string> = {
-  proposed: "bg-blue-100 text-blue-700",
-  accepted: "bg-teal-100 text-teal-700",
-  in_progress: "bg-purple-100 text-purple-700",
-  completed: "bg-green-100 text-green-700",
-  canceled: "bg-red-100 text-red-700",
+  proposed: "app-badge app-badge-neutral",
+  accepted: "app-badge app-badge-medium",
+  in_progress: "app-badge app-badge-medium",
+  completed: "app-badge app-badge-low",
+  canceled: "app-badge app-badge-high",
 };
 
 const STATUS_OPTIONS = ["all", "proposed", "accepted", "in_progress", "completed", "canceled"];
@@ -23,7 +26,6 @@ export function PlansClient({ locale }: { locale: string }) {
   const { format } = useCurrency();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
-  const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("all");
   const [providerFilter, setProviderFilter] = useState("all");
   const [startDate, setStartDate] = useState("");
@@ -32,32 +34,38 @@ export function PlansClient({ locale }: { locale: string }) {
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [showNewPlan, setShowNewPlan] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-
-  const fetchPlans = useCallback(async () => {
-    setLoading(true);
+  const plansUrl = useMemo(() => {
     const params = new URLSearchParams();
     if (statusFilter !== "all") params.set("status", statusFilter);
     if (providerFilter !== "all") params.set("provider_id", providerFilter);
     if (startDate) params.set("start_date", startDate);
     if (endDate) params.set("end_date", endDate);
-    const res = await fetch(`/api/plans?${params}`);
-    const data = await res.json();
-    setPlans((data.plans ?? data ?? []) as Plan[]);
-    setLoading(false);
+    return `/api/plans?${params.toString()}`;
   }, [statusFilter, providerFilter, startDate, endDate]);
+  const {
+    data: plansData,
+    loading,
+    refetch: refetchPlans,
+  } = useFetch<Plan[] | { plans?: Plan[] }>(plansUrl, {
+    ttl: 30_000,
+    initialData: [],
+  });
+  const { data: providersData } = useFetch<Provider[] | { providers?: Provider[] }>(
+    "/api/providers",
+    { ttl: 300_000, initialData: [] }
+  );
 
   useEffect(() => {
-    fetch("/api/providers")
-      .then((r) => r.json())
-      .then((d) => {
-        const raw = d?.providers ?? d;
-        setProviders((Array.isArray(raw) ? raw : []) as Provider[]);
-      });
-  }, []);
+    const raw = Array.isArray(plansData) ? plansData : plansData?.plans ?? [];
+    setPlans((Array.isArray(raw) ? raw : []) as Plan[]);
+  }, [plansData]);
 
   useEffect(() => {
-    fetchPlans();
-  }, [fetchPlans]);
+    const raw = Array.isArray(providersData)
+      ? providersData
+      : providersData?.providers ?? [];
+    setProviders((Array.isArray(raw) ? raw : []) as Provider[]);
+  }, [providersData]);
 
   async function handleQuickAction(
     e: React.MouseEvent,
@@ -86,7 +94,8 @@ export function PlansClient({ locale }: { locale: string }) {
     });
 
     setActionLoading(null);
-    fetchPlans();
+    apiCache.invalidate("/api/plans");
+    refetchPlans();
   }
 
   function exportToCSV() {
@@ -190,24 +199,24 @@ export function PlansClient({ locale }: { locale: string }) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="list-page-header">
         <div>
-          <h1 className="text-2xl font-bold">Treatment Plans</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <h1 className="list-page-title">Treatment Plans</h1>
+          <p className="list-page-subtitle">
             {filtered.length} plans
           </p>
         </div>
         <div className="flex gap-2">
           <button
             onClick={exportToCSV}
-            className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted transition-colors flex items-center gap-1.5"
+            className="app-btn-secondary flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors hover:bg-muted"
           >
             <Download className="size-4 inline-block" />
             Export CSV
           </button>
           <button
             onClick={() => setShowNewPlan(true)}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity"
+            className="app-btn-primary px-4 py-2 text-sm font-medium transition-colors"
           >
             + New Plan
           </button>
@@ -233,9 +242,9 @@ export function PlansClient({ locale }: { locale: string }) {
             >
               <p className="text-xl font-bold">{count}</p>
               <span
-                className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
+                className={`mt-1 inline-block capitalize ${
                   status === "all"
-                    ? "bg-gray-100 text-gray-600"
+                    ? "app-badge app-badge-neutral"
                     : STATUS_COLORS[status] ?? ""
                 }`}
               >
@@ -248,12 +257,11 @@ export function PlansClient({ locale }: { locale: string }) {
 
       {/* Filters row */}
       <div className="flex flex-wrap gap-3 items-center">
-        <input
-          type="text"
-          placeholder="Search by plan name or patient..."
+        <SearchInput
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background w-64"
+          onChange={setSearch}
+          placeholder="Search by plan name or patient..."
+          className="w-64"
         />
 
         <select
@@ -337,8 +345,9 @@ export function PlansClient({ locale }: { locale: string }) {
                         {plan.name_en as string}
                       </h3>
                       <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium shrink-0 ${
-                          STATUS_COLORS[plan.status as string] ?? ""
+                        className={`shrink-0 ${
+                          STATUS_COLORS[plan.status as string] ??
+                          "app-badge app-badge-neutral"
                         }`}
                       >
                         {(plan.status as string)?.replace("_", " ")}
@@ -429,7 +438,8 @@ export function PlansClient({ locale }: { locale: string }) {
           locale={locale}
           onClose={() => setSelectedPlanId(null)}
           onStatusChange={() => {
-            fetchPlans();
+            apiCache.invalidate("/api/plans");
+            refetchPlans();
           }}
         />
       )}
@@ -440,7 +450,8 @@ export function PlansClient({ locale }: { locale: string }) {
           onClose={() => setShowNewPlan(false)}
           onSuccess={() => {
             setShowNewPlan(false);
-            fetchPlans();
+            apiCache.invalidate("/api/plans");
+            refetchPlans();
           }}
         />
       )}

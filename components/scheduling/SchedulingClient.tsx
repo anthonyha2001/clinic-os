@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { MiniCalendar } from "./MiniCalendar";
 import { StatsBar } from "./StatsBar";
@@ -7,9 +7,17 @@ import { DayView } from "./DayView";
 import { WeekView } from "./WeekView";
 import { AppointmentPanel } from "./AppointmentPanel";
 import { AppointmentFormDrawer } from "./AppointmentFormDrawer";
+import { apiCache } from "@/lib/cache/apiCache";
+import { useFetch, useParallelFetch } from "@/hooks/useFetch";
 
 type Appointment = Record<string, unknown>;
 type Provider = Record<string, unknown>;
+type CheckinLite = {
+  id: string;
+  appointment_id: string;
+  status: string;
+  checked_in_at: string | null;
+};
 
 function getMondayOfWeek(date: Date): Date {
   const d = new Date(date);
@@ -64,28 +72,12 @@ export function SchedulingClient({ locale }: { locale: string }) {
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [createSlot, setCreateSlot] = useState<{ date: Date; providerId?: string } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [checkinStatuses, setCheckinStatuses] = useState<Record<string, string>>({});
+  const [checkinsTick, setCheckinsTick] = useState(0);
+  const [refreshTick, setRefreshTick] = useState(0);
 
-  const fetchCheckins = useCallback(async () => {
-    const res = await fetch("/api/reception/checkin", { credentials: "include" });
-    if (res.ok) {
-      const data = await res.json();
-      const map: Record<string, string> = {};
-      for (const item of data) {
-        if (item.checkin_status) {
-          map[item.appointment_id] = item.checkin_status;
-        }
-      }
-      setCheckinStatuses(map);
-    }
-  }, []);
-
-  const fetchAppointments = useCallback(async () => {
-    setLoading(true);
+  const range = useMemo(() => {
     let startDate: Date;
     let endDate: Date;
-
     if (viewMode === "day") {
       startDate = new Date(selectedDate);
       startDate.setHours(0, 0, 0, 0);
@@ -97,44 +89,66 @@ export function SchedulingClient({ locale }: { locale: string }) {
       endDate.setDate(startDate.getDate() + 6);
       endDate.setHours(23, 59, 59, 999);
     }
-
-    const params = new URLSearchParams({
-      start_date: startDate.toISOString(),
-      end_date: endDate.toISOString(),
-    });
-
-    const res = await fetch(`/api/appointments?${params}`, {
-      cache: "no-store",
-      credentials: "include",
-    });
-    const data = await res.json();
-    const rawList = data.appointments ?? data ?? [];
-    const list = Array.isArray(rawList) ? rawList : [];
-    setAppointments(list.map((a: Record<string, unknown>) => normalizeAppointment(a)));
-    setLoading(false);
+    return { startDate, endDate };
   }, [selectedDate, viewMode]);
 
+  const appointmentsUrl = useMemo(() => {
+    const params = new URLSearchParams({
+      start_date: range.startDate.toISOString(),
+      end_date: range.endDate.toISOString(),
+      _rt: String(refreshTick),
+    });
+    return `/api/appointments?${params.toString()}`;
+  }, [range, refreshTick]);
+
+  const { data: providersData } = useFetch<Provider[]>("/api/providers?compact=1", {
+    ttl: 300_000,
+    initialData: [],
+  });
+  const { data: schedulingData, loading } = useParallelFetch<{
+    appointments: Appointment[] | { appointments?: Appointment[] };
+    checkins: CheckinLite[];
+  }>(
+    {
+      appointments: appointmentsUrl,
+      checkins: `/api/reception/checkin?lite=1&_rt=${checkinsTick}`,
+    },
+    30_000
+  );
+
   useEffect(() => {
-    fetch("/api/providers", { cache: "no-store", credentials: "include" })
-      .then((r) => r.json())
-      .then((d) => {
-        const list = d.providers ?? d ?? [];
-        setProviders(Array.isArray(list) ? list : []);
-      });
+    const t = setInterval(() => setCheckinsTick((v) => v + 1), 15_000);
+    return () => clearInterval(t);
   }, []);
 
   useEffect(() => {
-    fetchAppointments();
-  }, [fetchAppointments]);
+    const raw = schedulingData.appointments;
+    const list = Array.isArray(raw) ? raw : raw?.appointments ?? [];
+    setAppointments(
+      (Array.isArray(list) ? list : []).map((a: Record<string, unknown>) =>
+        normalizeAppointment(a)
+      )
+    );
+  }, [schedulingData.appointments]);
 
   useEffect(() => {
-    fetchCheckins();
-  }, [fetchCheckins]);
+    setProviders(Array.isArray(providersData) ? providersData : []);
+  }, [providersData]);
 
-  useEffect(() => {
-    const t = setInterval(fetchCheckins, 15_000);
-    return () => clearInterval(t);
-  }, [fetchCheckins]);
+  const checkinStatuses = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const item of schedulingData.checkins ?? []) {
+      if (item.status) {
+        map[item.appointment_id] = item.status;
+      }
+    }
+    return map;
+  }, [schedulingData.checkins]);
+
+  function refreshAppointments() {
+    apiCache.invalidate("/api/appointments?");
+    setRefreshTick((v) => v + 1);
+  }
 
   function handleSlotClick(date: Date, providerId?: string) {
     setCreateSlot({ date, providerId });
@@ -172,9 +186,9 @@ export function SchedulingClient({ locale }: { locale: string }) {
   const isToday = new Date().toDateString() === selectedDate.toDateString();
 
   return (
-    <div className="flex gap-4 h-[calc(100vh-5rem)] min-h-0">
+    <div className="flex h-[calc(100vh-5rem)] min-h-0 gap-6">
       {/* LEFT SIDEBAR */}
-      <div className="w-56 shrink-0 flex flex-col gap-4 overflow-y-auto">
+      <div className="w-60 shrink-0 flex flex-col gap-4 overflow-y-auto">
         <MiniCalendar
           selectedDate={selectedDate}
           onSelectDate={(d) => {
@@ -192,8 +206,8 @@ export function SchedulingClient({ locale }: { locale: string }) {
         />
 
         {providers.length > 0 && (
-          <div className="rounded-xl border bg-card p-3">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+          <div className="app-card p-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Providers
             </p>
             <div className="space-y-1.5">
@@ -219,61 +233,62 @@ export function SchedulingClient({ locale }: { locale: string }) {
             setCreateSlot({ date: selectedDate });
             setShowCreateForm(true);
           }}
-          className="w-full rounded-xl bg-primary px-3 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity"
+          className="app-btn-primary w-full px-4 py-2.5 text-sm font-medium transition-colors"
         >
           + New Appointment
         </button>
       </div>
 
       {/* CENTER — Calendar */}
-      <div className="flex-1 flex flex-col min-w-0 min-h-0">
-        <div className="flex items-center justify-between mb-3 shrink-0 flex-wrap gap-2">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <button
               onClick={() => {
                 setSelectedDate(new Date());
                 setViewMode("day");
               }}
-              className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${isToday && viewMode === "day" ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"}`}
+              className={`h-9 rounded-xl border px-3 text-xs font-medium transition-colors ${isToday && viewMode === "day" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-foreground hover:bg-muted"}`}
             >
               Today
             </button>
             <button
               onClick={() => navigate(-1)}
-              className="rounded-lg border px-2.5 py-1.5 text-xs hover:bg-muted"
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
             >
               <ChevronLeft className="size-4" />
             </button>
             <button
               onClick={() => navigate(1)}
-              className="rounded-lg border px-2.5 py-1.5 text-xs hover:bg-muted"
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
             >
               <ChevronRight className="size-4" />
             </button>
-            <span className="text-sm font-semibold ms-1">{dateLabel}</span>
+            <span className="ms-1 text-sm font-semibold text-foreground">{dateLabel}</span>
           </div>
-          <div className="flex rounded-lg border overflow-hidden">
+          <div className="flex h-9 items-center gap-1 rounded-xl border border-border bg-card p-1">
             <button
               onClick={() => setViewMode("day")}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "day" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "day" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
             >
               Day
             </button>
             <button
               onClick={() => setViewMode("week")}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "week" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "week" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
             >
               Week
             </button>
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 rounded-xl border bg-card overflow-hidden">
+        <div className="app-card flex-1 min-h-0 overflow-hidden">
           {loading ? (
-            <div className="h-full flex items-center justify-center">
-              <div className="text-sm text-muted-foreground animate-pulse">
-                Loading appointments...
-              </div>
+            <div className="h-full p-4 space-y-3 animate-pulse">
+              <div className="h-8 w-40 rounded bg-muted" />
+              <div className="h-16 rounded bg-muted" />
+              <div className="h-16 rounded bg-muted" />
+              <div className="h-16 rounded bg-muted" />
             </div>
           ) : viewMode === "day" ? (
             <DayView
@@ -310,7 +325,7 @@ export function SchedulingClient({ locale }: { locale: string }) {
           onClose={() => setSelectedAppointment(null)}
           onStatusChange={(updated) => {
             setSelectedAppointment(updated);
-            fetchAppointments();
+            refreshAppointments();
           }}
           onNewAppointment={() => {
             setCreateSlot({ date: selectedDate });
@@ -327,7 +342,7 @@ export function SchedulingClient({ locale }: { locale: string }) {
           onClose={() => setShowCreateForm(false)}
           onSuccess={() => {
             setShowCreateForm(false);
-            fetchAppointments();
+            refreshAppointments();
           }}
         />
       )}

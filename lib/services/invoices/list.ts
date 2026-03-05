@@ -7,10 +7,12 @@ export interface ListInvoicesInput {
   startDate?: string;
   endDate?: string;
   providerId?: string;
+  limit?: number;
 }
 
 export async function listInvoices(input: ListInvoicesInput) {
   const { orgId, patientId, status, startDate, endDate, providerId } = input;
+  const limit = Math.min(Math.max(input.limit ?? 500, 1), 1000);
   const statuses = Array.isArray(status)
     ? status.filter(Boolean)
     : status
@@ -19,7 +21,13 @@ export async function listInvoices(input: ListInvoicesInput) {
 
   return pgClient`
     SELECT
-      i.*,
+      i.id,
+      i.invoice_number,
+      i.patient_id,
+      i.status,
+      i.total,
+      i.created_at,
+      i.appointment_id,
       p.id AS patient_id_ref,
       p.first_name AS patient_first_name,
       p.last_name AS patient_last_name,
@@ -54,5 +62,6 @@ export async function listInvoices(input: ListInvoicesInput) {
       pp.id,
       u.full_name
     ORDER BY i.created_at DESC
+    LIMIT ${limit}
   `;
 }

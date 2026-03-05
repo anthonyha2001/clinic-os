@@ -36,6 +36,7 @@
   },
   "nav": {
     "dashboard": "Dashboard",
+    "appointments": "Appointments",
     "scheduling": "Scheduling",
     "patients": "Patients",
     "billing": "Billing",
@@ -50,6 +51,7 @@
       "services": "Services",
       "providerTypes": "Provider Types",
       "clinicInfo": "Clinic Info",
+      "schedule": "Schedule",
       "whatsapp": "WhatsApp",
       "payments": "Payment Methods",
       "policies": "Policies",

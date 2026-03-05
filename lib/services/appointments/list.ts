@@ -39,64 +39,40 @@ export async function listAppointments(
       pp.id AS provider_id,
       u.full_name AS provider_name,
       pp.color_hex AS provider_color,
-      s.name_en AS service_name
+      svc.name_en AS service_name
     FROM appointments a
     JOIN patients p ON p.id = a.patient_id
     JOIN provider_profiles pp ON pp.id = a.provider_id
     JOIN users u ON u.id = pp.user_id
-    LEFT JOIN appointment_lines al ON al.appointment_id = a.id
-    LEFT JOIN services s ON s.id = al.service_id
+    LEFT JOIN LATERAL (
+      SELECT s.name_en
+      FROM appointment_lines al
+      JOIN services s ON s.id = al.service_id
+      WHERE al.appointment_id = a.id
+      ORDER BY al.sequence_order ASC
+      LIMIT 1
+    ) svc ON true
     WHERE a.organization_id = ${input.orgId}
       AND a.start_time >= ${start.toISOString()}
       AND a.start_time < ${end.toISOString()}
     ORDER BY a.start_time ASC
+    LIMIT 2000
   `;
-
-  const byAppt = new Map<
-    string,
-    {
-      id: string;
-      startTime: string;
-      endTime: string;
-      status: string;
-      patientId: string;
-      patientName: string;
-      providerId: string;
-      providerName: string;
-      providerColor: string;
-      serviceName: string;
-      planItemId: string | null;
-    }
-  >();
-
-  for (const row of rows as unknown as Record<string, unknown>[]) {
-    const apptId = String(row.id);
-    if (!byAppt.has(apptId)) {
-      const firstName = String(row.first_name ?? "");
-      const lastName = String(row.last_name ?? "");
-      byAppt.set(apptId, {
-        id: apptId,
-        startTime: new Date(row.start_time as Date).toISOString(),
-        endTime: new Date(row.end_time as Date).toISOString(),
-        status: String(row.status ?? "scheduled"),
-        patientId: String(row.patient_id),
-        patientName: `${firstName} ${lastName}`.trim() || "Unknown",
-        providerId: String(row.provider_id),
-        providerName: String(row.provider_name ?? ""),
-        providerColor: String(row.provider_color ?? "#3B82F6"),
-        serviceName: String(row.service_name ?? ""),
-        planItemId: row.plan_item_id ? String(row.plan_item_id) : null,
-      });
-    } else {
-      const appt = byAppt.get(apptId)!;
-      const svc = String(row.service_name ?? "").trim();
-      if (svc && !appt.serviceName.includes(svc)) {
-        appt.serviceName = appt.serviceName
-          ? `${appt.serviceName}, ${svc}`
-          : svc;
-      }
-    }
-  }
-
-  return Array.from(byAppt.values());
+  return (rows as unknown as Record<string, unknown>[]).map((row) => {
+    const firstName = String(row.first_name ?? "");
+    const lastName = String(row.last_name ?? "");
+    return {
+      id: String(row.id),
+      startTime: new Date(row.start_time as Date).toISOString(),
+      endTime: new Date(row.end_time as Date).toISOString(),
+      status: String(row.status ?? "scheduled"),
+      patientId: String(row.patient_id),
+      patientName: `${firstName} ${lastName}`.trim() || "Unknown",
+      providerId: String(row.provider_id),
+      providerName: String(row.provider_name ?? ""),
+      providerColor: String(row.provider_color ?? "#3B82F6"),
+      serviceName: String(row.service_name ?? ""),
+      planItemId: row.plan_item_id ? String(row.plan_item_id) : null,
+    };
+  });
 }

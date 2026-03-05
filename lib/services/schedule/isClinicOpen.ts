@@ -88,12 +88,11 @@ export function getAvailableSlots(
   const wh = workingHours ?? DEFAULT_WORKING_HOURS;
   const od = offDays ?? [];
 
-  const result = isClinicOpen(wh, od, date);
-  if (!result.open) return [];
-
   const dayKey = DAY_MAP[date.getDay()];
   const schedule = wh[dayKey];
   if (!schedule?.open) return [];
+  const offDay = od.find((o) => isDateMatch(o, date));
+  if (offDay) return [];
 
   const fromMins = parseTime(schedule.from);
   const toMins = parseTime(schedule.to);

@@ -14,7 +14,7 @@ export const GET = withAuth(async (request, { user }) => {
   })();
 
   const end = new Date(start);
-  end.setDate(start.getDate() + 7);
+  end.setDate(start.getDate() + 8);
 
   const rows = await pgClient`
     SELECT

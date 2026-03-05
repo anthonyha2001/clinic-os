@@ -1,12 +1,5 @@
-import { setRequestLocale } from "next-intl/server";
-import { SchedulingClient } from "@/components/scheduling/SchedulingClient";
-
-export default async function SchedulingPage({
-  params,
-}: {
-  params: Promise<{ locale: string }>;
-}) {
+import { redirect } from "@/i18n/navigation";
+export default async function SchedulingPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  setRequestLocale(locale);
-  return <SchedulingClient locale={locale} />;
+  return redirect({ href: "/appointments", locale: locale as "en" | "fr" | "ar" });
 }

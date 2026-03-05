@@ -46,7 +46,7 @@ async function main() {
         ON CONFLICT DO NOTHING
       `;
       added++;
-      console.log(`Granted reports.view to admin role ${role.id} (org ${role.organization_id}).`);
+      console.log("Granted reports.view to an admin role.");
     }
   }
   console.log(`Done. Granted reports.view to ${added} admin role(s).`);

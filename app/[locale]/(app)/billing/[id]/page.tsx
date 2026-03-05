@@ -1,5 +1,16 @@
 import { setRequestLocale } from "next-intl/server";
-import { InvoiceDetailClient } from "@/components/billing/InvoiceDetailClient";
+import dynamic from "next/dynamic";
+
+const InvoiceDetailClient = dynamic(
+  () =>
+    import("@/components/billing/InvoiceDetailClient").then(
+      (mod) => mod.InvoiceDetailClient
+    ),
+  {
+    loading: () => <div className="h-24 animate-pulse rounded-xl bg-muted" />,
+    ssr: false,
+  }
+);
 
 export default async function InvoiceDetailPage({
   params,

@@ -172,6 +172,12 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
     if (res.ok) {
       const d = await res.json();
       setOrgSettings((prev) => ({ ...prev, ...d }));
+      const nextCurrency = (d?.currency ?? updates.currency) as string | undefined;
+      if (nextCurrency && typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("currency-updated", { detail: { currency: nextCurrency } })
+        );
+      }
       setSettingsSaved(true);
       setTimeout(() => setSettingsSaved(false), 3000);
     }
@@ -196,14 +202,15 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
     setSavingSchedule(false);
   }
 
-  async function saveOffDays() {
+  async function saveOffDays(nextOffDays?: OffDay[]) {
+    const payloadOffDays = nextOffDays ?? offDays;
     setSavingSchedule(true);
     setScheduleSaved(false);
     const res = await fetch("/api/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ off_days: offDays }),
+      body: JSON.stringify({ off_days: payloadOffDays }),
     });
     if (res.ok) {
       const d = await res.json();
@@ -222,13 +229,13 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
     setOffDays(updated);
     setNewOffDay({ date: "", label: "", recurring: false });
     setShowAddOffDay(false);
-    saveSettings({ off_days: updated });
+    saveOffDays(updated);
   }
 
   function removeOffDay(id: string) {
     const updated = offDays.filter((o) => o.id !== id);
     setOffDays(updated);
-    saveSettings({ off_days: updated });
+    saveOffDays(updated);
   }
 
   const DAY_LABELS: Record<DayKey, string> = {

@@ -3,7 +3,7 @@
  * Key: current status → Value: array of allowed next statuses
  */
 export const VALID_TRANSITIONS: Record<string, string[]> = {
-  scheduled: ["confirmed", "canceled", "completed"],
+  scheduled: ["confirmed", "canceled", "completed", "no_show"],
   confirmed: ["completed", "canceled", "no_show"],
   completed: [],
   canceled: ["scheduled"],

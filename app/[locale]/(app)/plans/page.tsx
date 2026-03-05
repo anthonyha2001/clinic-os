@@ -1,5 +1,13 @@
 import { setRequestLocale } from "next-intl/server";
-import { PlansClient } from "@/components/plans/PlansClient";
+import dynamic from "next/dynamic";
+
+const PlansClient = dynamic(
+  () => import("@/components/plans/PlansClient").then((mod) => mod.PlansClient),
+  {
+    loading: () => <div className="h-24 animate-pulse rounded-xl bg-muted" />,
+    ssr: false,
+  }
+);
 
 export default async function PlansPage({
   params,

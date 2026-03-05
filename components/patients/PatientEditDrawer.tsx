@@ -16,6 +16,57 @@ type Patient = {
   preferred_locale?: string;
 };
 
+function toDateInputValue(value?: string) {
+  if (!value) return "";
+  const direct = value.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (direct) return direct[1];
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+type FieldProps = {
+  label: string;
+  name: string;
+  type?: string;
+  value: string;
+  onChange: (name: string, value: string) => void;
+  options?: { value: string; label: string }[];
+};
+
+function Field({ label, name, type = "text", value, onChange, options }: FieldProps) {
+  return (
+    <div>
+      <label className="block text-xs font-medium mb-1 text-muted-foreground">
+        {label}
+      </label>
+      {options ? (
+        <select
+          value={value}
+          onChange={(e) => onChange(name, e.target.value)}
+          className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background"
+        >
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input
+          type={type}
+          value={value}
+          onChange={(e) => onChange(name, e.target.value)}
+          className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background"
+        />
+      )}
+    </div>
+  );
+}
+
 export function PatientEditDrawer({
   patient,
   onClose,
@@ -31,9 +82,7 @@ export function PatientEditDrawer({
     phone: patient.phone ?? "",
     phone_secondary: patient.phone_secondary ?? "",
     email: patient.email ?? "",
-    date_of_birth: patient.date_of_birth
-      ? patient.date_of_birth.split("T")[0]
-      : "",
+    date_of_birth: toDateInputValue(patient.date_of_birth),
     gender: patient.gender ?? "",
     address: patient.address ?? "",
     preferred_locale: patient.preferred_locale ?? "en",
@@ -41,48 +90,8 @@ export function PatientEditDrawer({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  function Field({
-    label,
-    name,
-    type = "text",
-    options,
-  }: {
-    label: string;
-    name: keyof typeof form;
-    type?: string;
-    options?: { value: string; label: string }[];
-  }) {
-    return (
-      <div>
-        <label className="block text-xs font-medium mb-1 text-muted-foreground">
-          {label}
-        </label>
-        {options ? (
-          <select
-            value={form[name]}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, [name]: e.target.value }))
-            }
-            className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background"
-          >
-            {options.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <input
-            type={type}
-            value={form[name]}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, [name]: e.target.value }))
-            }
-            className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background"
-          />
-        )}
-      </div>
-    );
+  function handleFieldChange(name: string, value: string) {
+    setForm((f) => ({ ...f, [name]: value }));
   }
 
   async function handleSubmit() {
@@ -164,25 +173,25 @@ export function PatientEditDrawer({
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
-            <Field label="First Name *" name="first_name" />
-            <Field label="Last Name *" name="last_name" />
+            <Field label="First Name *" name="first_name" value={form.first_name} onChange={handleFieldChange} />
+            <Field label="Last Name *" name="last_name" value={form.last_name} onChange={handleFieldChange} />
           </div>
-          <Field label="Phone *" name="phone" type="tel" />
-          <Field label="Secondary Phone" name="phone_secondary" type="tel" />
-          <Field label="Email" name="email" type="email" />
-          <Field label="Date of Birth" name="date_of_birth" type="date" />
-          <Field label="Gender" name="gender" options={[
+          <Field label="Phone *" name="phone" type="tel" value={form.phone} onChange={handleFieldChange} />
+          <Field label="Secondary Phone" name="phone_secondary" type="tel" value={form.phone_secondary} onChange={handleFieldChange} />
+          <Field label="Email" name="email" type="email" value={form.email} onChange={handleFieldChange} />
+          <Field label="Date of Birth" name="date_of_birth" type="date" value={form.date_of_birth} onChange={handleFieldChange} />
+          <Field label="Gender" name="gender" value={form.gender} onChange={handleFieldChange} options={[
             { value: "", label: "Select..." },
             { value: "male", label: "Male" },
             { value: "female", label: "Female" },
             { value: "other", label: "Other" },
           ]} />
-          <Field label="Preferred Language" name="preferred_locale" options={[
+          <Field label="Preferred Language" name="preferred_locale" value={form.preferred_locale} onChange={handleFieldChange} options={[
             { value: "en", label: "English" },
             { value: "fr", label: "French" },
             { value: "ar", label: "Arabic" },
           ]} />
-          <Field label="Address" name="address" />
+          <Field label="Address" name="address" value={form.address} onChange={handleFieldChange} />
         </div>
 
         <div className="border-t px-6 py-4 flex gap-3">

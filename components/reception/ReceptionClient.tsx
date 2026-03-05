@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Clock, UserCheck, Stethoscope, CheckCircle,
@@ -7,6 +7,8 @@ import {
   AlertCircle, Loader2, ChevronLeft, FileText,
   Printer, X, User, Activity
 } from "lucide-react";
+import { useFetch } from "@/hooks/useFetch";
+import { apiCache } from "@/lib/cache/apiCache";
 
 type CheckinStatus = "waiting" | "in_chair" | "done" | "skipped";
 
@@ -80,7 +82,7 @@ export function ReceptionClient({ locale }: { locale: string }) {
   const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
   const [allAppts, setAllAppts] = useState<Appointment[]>([]);
   const [todayQueue, setTodayQueue] = useState<Appointment[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [refreshTick, setRefreshTick] = useState(0);
   const [time, setTime] = useState(now());
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | CheckinStatus>("all");
@@ -102,25 +104,29 @@ export function ReceptionClient({ locale }: { locale: string }) {
     return () => clearInterval(t);
   }, []);
 
-  const fetchWeek = useCallback(async () => {
-    setLoading(true);
-    const weekStartStr = weekStart.toISOString().split("T")[0];
-    const res = await fetch(`/api/reception/week?week_start=${weekStartStr}`, { credentials: "include" });
-    if (res.ok) {
-      const data = await res.json();
-      setAllAppts(data);
-      // Filter today
-      const todayStr = new Date().toDateString();
-      setTodayQueue(data.filter((a: Appointment) => new Date(a.start_time).toDateString() === todayStr));
-    }
-    setLoading(false);
-  }, [weekStart]);
+  const weekStartStr = useMemo(() => weekStart.toISOString().split("T")[0], [weekStart]);
+  const { data: weekData, loading, refetch: refetchWeek } = useFetch<Appointment[]>(
+    `/api/reception/week?week_start=${weekStartStr}&_rt=${refreshTick}`,
+    { ttl: 30_000, initialData: [] }
+  );
 
-  useEffect(() => { fetchWeek(); }, [fetchWeek]);
   useEffect(() => {
-    const t = setInterval(fetchWeek, 30_000);
+    const list = Array.isArray(weekData) ? weekData : [];
+    setAllAppts(list);
+    const todayStr = new Date().toDateString();
+    setTodayQueue(list.filter((a) => new Date(a.start_time).toDateString() === todayStr));
+  }, [weekData]);
+
+  function refreshWeek() {
+    apiCache.invalidate("/api/reception/week?");
+    setRefreshTick((v) => v + 1);
+    refetchWeek();
+  }
+
+  useEffect(() => {
+    const t = setInterval(refreshWeek, 30_000);
     return () => clearInterval(t);
-  }, [fetchWeek]);
+  }, []);
 
   // Update today's queue when selected day changes
   useEffect(() => {
@@ -153,7 +159,7 @@ export function ReceptionClient({ locale }: { locale: string }) {
       });
       const text = await res.text();
       if (!res.ok) console.error("Checkin failed:", text);
-      await fetchWeek();
+      refreshWeek();
     } catch (e) {
       console.error("Checkin error:", e);
     } finally {
@@ -180,6 +186,9 @@ export function ReceptionClient({ locale }: { locale: string }) {
 
       const data = await res.json();
 
+      if (status === "done" && (data.invoice_created || data.invoice_id)) {
+        window.dispatchEvent(new Event("billing:invoice-from-appointment"));
+      }
       if (status === "done" && data.invoice_created) {
         setToast({ message: "✅ Appointment completed — Invoice created automatically", type: "success" });
       } else if (status === "done" && data.invoice_id) {
@@ -188,7 +197,7 @@ export function ReceptionClient({ locale }: { locale: string }) {
         setToast({ message: "✅ Appointment marked as done", type: "success" });
       }
 
-      await fetchWeek();
+      refreshWeek();
     } catch (e) {
       console.error("Status update error:", e);
       setToast({ message: "Network error", type: "error" });
@@ -245,7 +254,7 @@ export function ReceptionClient({ locale }: { locale: string }) {
             </p>
           </div>
           <div className="flex gap-2">
-            <button onClick={fetchWeek} className="flex items-center gap-1.5 text-sm border rounded-lg px-3 py-2 hover:bg-muted">
+            <button onClick={refreshWeek} className="flex items-center gap-1.5 text-sm border rounded-lg px-3 py-2 hover:bg-muted">
               <RefreshCw className="size-4" /> Refresh
             </button>
             <button onClick={() => router.push(`/${locale}/scheduling`)}
@@ -343,7 +352,11 @@ export function ReceptionClient({ locale }: { locale: string }) {
           </div>
 
           {loading ? (
-            <div className="p-8 text-center text-muted-foreground text-sm animate-pulse">Loading...</div>
+            <div className="p-5 space-y-3 animate-pulse">
+              <div className="h-10 rounded bg-muted" />
+              <div className="h-10 rounded bg-muted" />
+              <div className="h-10 rounded bg-muted" />
+            </div>
           ) : filtered.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">
               <Calendar className="size-10 mx-auto mb-2 opacity-30" />

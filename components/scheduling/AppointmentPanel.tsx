@@ -7,11 +7,11 @@ import { Calendar, X, CheckCircle, AlertTriangle, FileText, Loader2 } from "luci
 type Appointment = Record<string, unknown>;
 
 const STATUS_COLORS: Record<string, string> = {
-  scheduled: "bg-blue-100 text-blue-700",
-  confirmed: "bg-green-100 text-green-700",
-  completed: "bg-gray-100 text-gray-600",
-  canceled: "bg-red-100 text-red-700",
-  no_show: "bg-orange-100 text-orange-700",
+  scheduled: "bg-slate-100 text-slate-700",
+  confirmed: "bg-primary/10 text-primary",
+  completed: "bg-slate-100 text-slate-600",
+  canceled: "bg-slate-100 text-slate-500",
+  no_show: "bg-slate-100 text-slate-600",
 };
 
 const TRANSITIONS: Record<string, { label: string; next: string; style: string }[]> = {
@@ -72,6 +72,7 @@ export function AppointmentPanel({
         } else {
           onStatusChange({ ...appointment, ...data });
         }
+        window.dispatchEvent(new Event("billing:invoice-from-appointment"));
       } else {
         onStatusChange({ ...appointment, ...data });
       }
@@ -100,6 +101,7 @@ export function AppointmentPanel({
       return;
     }
 
+    window.dispatchEvent(new Event("billing:invoice-from-appointment"));
     setInvoiceSuccess({
       id: data.id ?? data.invoice?.id,
       number: data.invoice_number ?? data.invoice?.invoice_number ?? "—",
@@ -113,7 +115,7 @@ export function AppointmentPanel({
         <Calendar className="size-10 text-muted-foreground mb-3" />
         <p className="text-sm font-medium">No appointment selected</p>
         <p className="text-xs text-muted-foreground mt-1 mb-4">Click an appointment to see details</p>
-        <button onClick={onNewAppointment} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
+        <button onClick={onNewAppointment} className="app-btn-primary px-4 py-2 text-sm font-medium">
           + New Appointment
         </button>
       </div>
@@ -132,9 +134,14 @@ export function AppointmentPanel({
   const patientId = (appointment.patient_id as string) ?? (appointment.patientId as string);
   const isCompleted = appointment.status === "completed";
   const hasInvoice = !!(appointment.invoice_id ?? appointment.invoiceId);
+  const serviceName: string = (service?.name_en as string | undefined) ?? "";
+  const providerName: string =
+    ((provider?.user as Record<string, string> | undefined)?.full_name as
+      | string
+      | undefined) ?? ((provider as Record<string, string> | undefined)?.full_name ?? "");
 
   return (
-    <div className="rounded-xl border bg-card h-full flex flex-col overflow-hidden">
+    <div className="app-card h-full flex flex-col overflow-hidden">
       {/* Header */}
       <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderLeftColor: colorHex, borderLeftWidth: 3 }}>
         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[appointment.status as string] ?? ""}`}>
@@ -148,7 +155,7 @@ export function AppointmentPanel({
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Patient */}
         <div
-          className="cursor-pointer hover:bg-muted/50 rounded-lg p-2 -mx-2 transition-colors"
+          className="-mx-2 cursor-pointer rounded-xl p-2 transition-colors hover:bg-muted/60"
           onClick={() => patientId && router.push(`/${locale}/patients/${patientId}`)}
         >
           <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Patient</p>
@@ -172,29 +179,27 @@ export function AppointmentPanel({
         </div>
 
         {/* Service */}
-        {service && (
+        {serviceName ? (
           <div>
             <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Service</p>
-            <p className="text-sm font-medium">{service.name_en}</p>
+            <p className="text-sm font-medium">{serviceName}</p>
           </div>
-        )}
+        ) : null}
 
         {/* Provider */}
-        {provider && (
+        {providerName ? (
           <div>
             <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Provider</p>
             <div className="flex items-center gap-2">
               <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: colorHex }} />
-              <p className="text-sm font-medium">
-                {(provider.user as Record<string, string> | undefined)?.full_name ?? (provider as Record<string, string>).full_name}
-              </p>
+              <p className="text-sm font-medium">{providerName}</p>
             </div>
           </div>
-        )}
+        ) : null}
 
         {/* Linked plan item */}
-        {planItem && (
-          <div className="rounded-lg bg-primary/5 border border-primary/20 px-3 py-2">
+        {planItem ? (
+          <div className="rounded-xl border border-primary/15 bg-primary/5 px-3 py-2">
             <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Treatment Plan</p>
             <p className="text-xs font-medium text-primary">
               {(planItem.plan as Record<string, string> | undefined)?.name_en ?? "Linked plan"}
@@ -203,26 +208,26 @@ export function AppointmentPanel({
               Session {Number(planItem.quantity_completed ?? 0)}/{Number(planItem.quantity_total ?? 0)}
             </p>
           </div>
-        )}
+        ) : null}
 
         {/* Notes */}
-        {appointment.notes && (
+        {typeof appointment.notes === "string" && appointment.notes ? (
           <div>
             <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Notes</p>
-            <p className="text-sm bg-muted rounded-lg p-2">{appointment.notes as string}</p>
+            <p className="text-sm bg-muted rounded-lg p-2">{appointment.notes}</p>
           </div>
-        )}
+        ) : null}
 
         {/* Deposit */}
-        {appointment.deposit_required && (
-          <div className={`rounded-lg px-3 py-2 text-xs font-medium ${appointment.deposit_paid ? "bg-green-50 text-green-700" : "bg-yellow-50 text-yellow-700"}`}>
+        {Boolean(appointment.deposit_required) ? (
+          <div className={`rounded-xl px-3 py-2 text-xs font-medium ${appointment.deposit_paid ? "bg-slate-100 text-slate-700" : "bg-slate-100 text-slate-700"}`}>
             {appointment.deposit_paid ? (
               <><CheckCircle className="size-3.5 inline-block me-1" />Deposit paid</>
             ) : (
               <><AlertTriangle className="size-3.5 inline-block me-1" />Deposit required</>
             )}
           </div>
-        )}
+        ) : null}
 
         {/* Invoice section — show when completed */}
         {isCompleted && (
@@ -234,7 +239,7 @@ export function AppointmentPanel({
               {hasInvoice ? (
                 <button
                   onClick={() => router.push(`/${locale}/billing/${appointment.invoice_id ?? appointment.invoiceId}`)}
-                  className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 transition-colors"
+                  className="app-btn-primary w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium transition-colors"
                 >
                   <FileText className="size-4" />
                   View Invoice {(appointment.invoice_number ?? appointment.invoiceNumber) ? ` #${String(appointment.invoice_number ?? appointment.invoiceNumber)}` : ""}
@@ -247,7 +252,7 @@ export function AppointmentPanel({
                   </div>
                   <button
                     onClick={() => router.push(`/${locale}/billing/${invoiceSuccess.id}`)}
-                    className="w-full flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted transition-colors"
+                    className="app-btn-secondary w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium transition-colors hover:bg-muted"
                   >
                     <FileText className="size-4" />
                     Open Invoice
@@ -255,15 +260,15 @@ export function AppointmentPanel({
                 </div>
               ) : (
                 <>
-                  {invoiceError && (
+                  {invoiceError ? (
                     <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
                       {invoiceError}
                     </div>
-                  )}
+                  ) : null}
                   <button
                     onClick={handleIssueInvoice}
                     disabled={invoiceLoading}
-                    className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60 transition-opacity"
+                    className="app-btn-primary w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium disabled:opacity-60"
                   >
                     {invoiceLoading ? (
                       <><Loader2 className="size-4 animate-spin" /> Creating invoice...</>
@@ -282,7 +287,7 @@ export function AppointmentPanel({
       </div>
 
       {/* Status transitions */}
-      {transitions.length > 0 && (
+      {transitions.length > 0 ? (
         <div className="p-4 border-t space-y-2">
           {transitions.map((t) => (
             <button
@@ -295,7 +300,7 @@ export function AppointmentPanel({
             </button>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

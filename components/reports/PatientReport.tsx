@@ -89,6 +89,7 @@ export function PatientReport({ locale }: { locale: string }) {
   const hasError = !loading && (!data || (data as { error?: string }).error);
 
   const newPatients = Number(summary.new_patients ?? summary.patients_created_in_range ?? 0);
+  const totalPatients = Number(summary.total_patients ?? 0);
   const prevNew = Number(prevSummary.new_patients ?? 0);
   const newTrend =
     prevNew > 0 ? ((newPatients - prevNew) / prevNew) * 100 : 0;
@@ -142,6 +143,12 @@ export function PatientReport({ locale }: { locale: string }) {
       <>
       <KPICards
         cards={[
+          {
+            label: "Total Patients",
+            value: totalPatients,
+            color: "text-indigo-600",
+            sub: "All-time",
+          },
           {
             label: "New Patients",
             value: newPatients,

@@ -1,5 +1,6 @@
 import createMiddleware from "next-intl/middleware";
 import { NextResponse, type NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 import { routing } from "@/i18n/routing";
 
 const handleI18nRouting = createMiddleware(routing);
@@ -38,13 +39,50 @@ function hasSessionCookie(request: NextRequest): boolean {
     );
 }
 
+// Refresh Supabase session on every request
+async function refreshSupabaseSession(request: NextRequest): Promise<NextResponse> {
+  let response = NextResponse.next({ request });
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value)
+          );
+          response = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
+
+  // This triggers token refresh if needed and updates cookies
+  await supabase.auth.getUser();
+  return response;
+}
+
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
+  // Skip API routes entirely
   if (pathname.startsWith("/api")) {
     return NextResponse.next();
   }
 
+  // Skip i18n routing for public booking and superadmin (no locale prefix)
+  if (pathname.startsWith("/book") || pathname.startsWith("/superadmin")) {
+    return NextResponse.next();
+  }
+
+  // Redirect unauthenticated users to login
   if (!isPublicPath(pathname) && !hasSessionCookie(request)) {
     const locale = getLocaleFromPathname(pathname);
     const loginPath =
@@ -56,16 +94,20 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  const response = handleI18nRouting(request);
-  if (response.status >= 300 && response.status < 400) {
-    return response;
+  // For authenticated requests: refresh session cookies, then let i18n handle routing
+  if (!isPublicPath(pathname) && hasSessionCookie(request)) {
+    // Refresh the session (updates cookie if token was refreshed)
+    await refreshSupabaseSession(request);
+    // Always defer to i18n routing (handles / → /en redirect etc.)
+    return handleI18nRouting(request);
   }
 
-  return response;
+  // Public paths — just i18n routing
+  return handleI18nRouting(request);
 }
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|book|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

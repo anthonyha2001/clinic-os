@@ -135,3 +135,12 @@ export const PATCH = withAuth(async (request, { user, params }) => {
 
   return NextResponse.json(updated);
 });
+
+export const DELETE = withAuth(async (_req, { user, params }) => {
+  const id = params?.id as string;
+  await pgClient`
+    DELETE FROM appointment_checkins
+    WHERE id = ${id} AND organization_id = ${user.organizationId}
+  `;
+  return NextResponse.json({ deleted: true });
+});

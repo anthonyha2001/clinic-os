@@ -27,7 +27,7 @@ export const GET = withAuth(
 
       return NextResponse.json(services, {
         headers: {
-          "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
+          "Cache-Control": "private, max-age=300, stale-while-revalidate=600",
         },
       });
     } catch (e) {
