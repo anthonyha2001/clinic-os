@@ -29,14 +29,22 @@ function generateSlots(
   offDays: OffDay[] | null | undefined,
   date: Date,
   duration: number,
-  busySlots: { start: string; end: string }[]
+  busySlots: { start: string; end: string }[],
+  timezone: string = "Asia/Beirut"
 ): { time: string; available: boolean }[] {
   const wh = workingHours ?? DEFAULT_WORKING_HOURS;
   const existingAppointments = busySlots.map((b) => ({
     start: new Date(b.start),
     end: new Date(b.end),
   }));
-  const available = getAvailableSlots(wh, offDays, date, duration, existingAppointments);
+  const available = getAvailableSlots(
+    wh,
+    offDays,
+    date,
+    duration,
+    existingAppointments,
+    timezone
+  );
   const availableSet = new Set(available.map((d) => `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`));
   const dayKey = DAY_MAP[date.getDay()];
   const schedule = wh[dayKey];
@@ -58,7 +66,11 @@ function generateSlots(
   return slots;
 }
 
-function getDates(workingHours: WorkingHours | null | undefined, offDays: OffDay[] | null | undefined) {
+function getDates(
+  workingHours: WorkingHours | null | undefined,
+  offDays: OffDay[] | null | undefined,
+  timezone: string = "Asia/Beirut"
+) {
   const wh = workingHours ?? DEFAULT_WORKING_HOURS;
   const od = offDays ?? [];
   const result: { date: Date; disabled: boolean; reason?: string }[] = [];
@@ -70,7 +82,7 @@ function getDates(workingHours: WorkingHours | null | undefined, offDays: OffDay
     const dayKey = DAY_MAP[d.getDay()];
     const schedule = wh[dayKey];
     const isClosed = !schedule?.open;
-    const offDay = getOffDayForDate(od, d);
+    const offDay = getOffDayForDate(od, d, timezone);
     result.push({
       date: d,
       disabled: isClosed || !!offDay,
@@ -80,8 +92,12 @@ function getDates(workingHours: WorkingHours | null | undefined, offDays: OffDay
   return result;
 }
 
-function getNextAvailableDate(workingHours: WorkingHours | null | undefined, offDays: OffDay[] | null | undefined): Date | null {
-  const dates = getDates(workingHours, offDays);
+function getNextAvailableDate(
+  workingHours: WorkingHours | null | undefined,
+  offDays: OffDay[] | null | undefined,
+  timezone: string = "Asia/Beirut"
+): Date | null {
+  const dates = getDates(workingHours, offDays, timezone);
   const next = dates.find((d) => !d.disabled);
   return next?.date ?? null;
 }
@@ -129,11 +145,20 @@ export function PublicBookingClient({ org }: { org: Org }) {
     fetch(`/api/book/${org.slug}/availability?date=${dateStr}&provider_id=${selectedProvider.id}`)
       .then(r => r.json())
       .then(data => {
-        setSlots(generateSlots(org.working_hours, org.off_days, selectedDate, selectedService.duration, data.busy ?? []));
+        setSlots(
+          generateSlots(
+            org.working_hours,
+            org.off_days,
+            selectedDate,
+            selectedService.duration,
+            data.busy ?? [],
+            org.timezone ?? "Asia/Beirut"
+          )
+        );
       })
       .catch(() => setSlots([]))
       .finally(() => setSlotsLoading(false));
-  }, [selectedDate, selectedProvider, selectedService, org.slug, org.working_hours, org.off_days]);
+  }, [selectedDate, selectedProvider, selectedService, org.slug, org.working_hours, org.off_days, org.timezone]);
 
   async function handleSubmit() {
     if (!form.name || !form.phone) { setError("Name and phone are required"); return; }
@@ -303,7 +328,7 @@ export function PublicBookingClient({ org }: { org: Org }) {
             <h2 className="text-xl font-bold text-gray-900 mb-4">Pick a Date & Time</h2>
             {/* Date picker */}
             <div className="flex gap-2 overflow-x-auto pb-2 mb-5">
-              {getDates(org.working_hours, org.off_days).map(({ date: d, disabled, reason }) => {
+              {getDates(org.working_hours, org.off_days, org.timezone ?? "Asia/Beirut").map(({ date: d, disabled, reason }) => {
                 const isSelected = selectedDate?.toDateString() === d.toDateString();
                 return (
                   <button
@@ -329,8 +354,16 @@ export function PublicBookingClient({ org }: { org: Org }) {
               const wh = org.working_hours ?? DEFAULT_WORKING_HOURS;
               const dayKey = DAY_MAP[selectedDate.getDay()];
               const schedule = wh[dayKey];
-              const offDay = getOffDayForDate(org.off_days, selectedDate);
-              const nextAvail = getNextAvailableDate(org.working_hours, org.off_days);
+              const offDay = getOffDayForDate(
+                org.off_days,
+                selectedDate,
+                org.timezone ?? "Asia/Beirut"
+              );
+              const nextAvail = getNextAvailableDate(
+                org.working_hours,
+                org.off_days,
+                org.timezone ?? "Asia/Beirut"
+              );
               if (!schedule?.open || !!offDay) {
                 return (
                   <div className="rounded-2xl bg-gray-50 border border-gray-200 p-6 text-center">

@@ -18,8 +18,9 @@ interface SessionSchedulePopupProps {
     provider?: { id?: string; user?: { full_name?: string } };
     provider_id?: string;
   };
+  existingAppointment?: { id: string; startTime: string; endTime?: string } | null;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (appointment?: { id: string; start_time: string; plan_item_id?: string | null }) => void;
 }
 
 const TIME_SLOTS = [
@@ -37,12 +38,27 @@ function getFirstDayOfMonth(year: number, month: number) {
   return new Date(year, month, 1).getDay();
 }
 
-export function SessionSchedulePopup({ planItem, plan, onClose, onSuccess }: SessionSchedulePopupProps) {
+export function SessionSchedulePopup({ planItem, plan, existingAppointment, onClose, onSuccess }: SessionSchedulePopupProps) {
   const today = new Date();
-  const [viewYear, setViewYear] = useState(today.getFullYear());
-  const [viewMonth, setViewMonth] = useState(today.getMonth());
-  const [selectedDate, setSelectedDate] = useState<string>("");
-  const [selectedTime, setSelectedTime] = useState<string>("");
+  const existingStart = existingAppointment ? new Date(existingAppointment.startTime) : null;
+  const initialDate = existingStart
+    ? `${existingStart.getFullYear()}-${String(existingStart.getMonth() + 1).padStart(2, "0")}-${String(existingStart.getDate()).padStart(2, "0")}`
+    : "";
+  const rawMinutes = existingStart ? existingStart.getHours() * 60 + existingStart.getMinutes() : 0;
+  const nearestSlot =
+    existingStart && TIME_SLOTS.length > 0
+      ? TIME_SLOTS.reduce((best, slot) => {
+          const [h, m] = slot.split(":").map(Number);
+          const slotMins = h * 60 + m;
+          const bestMins = best ? (() => { const [bh, bm] = best.split(":").map(Number); return bh * 60 + bm; })() : -1;
+          return Math.abs(slotMins - rawMinutes) < Math.abs(bestMins - rawMinutes) ? slot : best;
+        }, TIME_SLOTS[0])
+      : "";
+  const initialTime = nearestSlot || "";
+  const [viewYear, setViewYear] = useState(existingStart?.getFullYear() ?? today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(existingStart?.getMonth() ?? today.getMonth());
+  const [selectedDate, setSelectedDate] = useState<string>(initialDate);
+  const [selectedTime, setSelectedTime] = useState<string>(initialTime);
   const [busySlots, setBusySlots] = useState<string[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -83,10 +99,50 @@ export function SessionSchedulePopup({ planItem, plan, onClose, onSuccess }: Ses
       .catch(() => setLoadingSlots(false));
   }, [selectedDate, providerId]);
 
+  const isReschedule = !!existingAppointment;
+
   async function handleBook() {
     if (!selectedDate || !selectedTime) { setError("Select a date and time slot"); return; }
     setLoading(true);
     setError(null);
+
+    const startTime = new Date(`${selectedDate}T${selectedTime}:00`);
+
+    if (isReschedule) {
+      const durationMs = existingAppointment!.endTime
+        ? new Date(existingAppointment.endTime).getTime() - new Date(existingAppointment.startTime).getTime()
+        : 30 * 60 * 1000;
+      const endTime = new Date(startTime.getTime() + durationMs);
+
+      const res = await fetch(`/api/appointments/${existingAppointment!.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          start_time: startTime.toISOString(),
+          end_time: endTime.toISOString(),
+        }),
+      });
+
+      if (res.status === 409) {
+        setError("This time slot is already taken. Please choose another.");
+        setLoading(false);
+        return;
+      }
+      if (!res.ok) {
+        const d = await res.json();
+        setError(d.error ?? "Failed to reschedule appointment.");
+        setLoading(false);
+        return;
+      }
+
+      const updated = (await res.json()) as { id: string; start_time: string; plan_item_id?: string | null };
+      setSuccess(true);
+      setTimeout(() => {
+        onSuccess({ ...updated, plan_item_id: updated.plan_item_id ?? planItem.id });
+      }, 800);
+      return;
+    }
 
     const serviceId = (planItem as Record<string, unknown>).service_id as string | undefined;
     if (!serviceId) {
@@ -94,8 +150,6 @@ export function SessionSchedulePopup({ planItem, plan, onClose, onSuccess }: Ses
       setLoading(false);
       return;
     }
-
-    const startTime = new Date(`${selectedDate}T${selectedTime}:00`);
 
     const res = await fetch("/api/appointments", {
       method: "POST",
@@ -122,8 +176,9 @@ export function SessionSchedulePopup({ planItem, plan, onClose, onSuccess }: Ses
       return;
     }
 
+    const created = (await res.json()) as { id: string; start_time: string; plan_item_id?: string | null };
     setSuccess(true);
-    setTimeout(() => { onSuccess(); }, 1200);
+    setTimeout(() => { onSuccess(created); }, 800);
   }
 
   // Calendar helpers
@@ -160,12 +215,12 @@ export function SessionSchedulePopup({ planItem, plan, onClose, onSuccess }: Ses
   return (
     <>
       <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
-        <div className="bg-card rounded-2xl shadow-2xl w-full max-w-lg pointer-events-auto overflow-hidden">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none overflow-y-auto">
+        <div className="bg-card rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] my-auto pointer-events-auto overflow-hidden flex flex-col shrink-0">
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b">
+          <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
             <div>
-              <h2 className="text-base font-bold">Schedule Session</h2>
+              <h2 className="text-base font-bold">{isReschedule ? "Reschedule Session" : "Schedule Session"}</h2>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {sessionLabel} · Session {nextSession} of {planItem.quantity_total} ·{" "}
                 {plan.patient?.first_name} {plan.patient?.last_name}
@@ -177,13 +232,16 @@ export function SessionSchedulePopup({ planItem, plan, onClose, onSuccess }: Ses
           </div>
 
           {success ? (
-            <div className="flex flex-col items-center justify-center py-12 gap-3">
+            <div className="flex flex-col items-center justify-center py-12 gap-3 shrink-0">
               <CheckCircle className="size-12 text-green-500" />
-              <p className="text-base font-semibold">Session booked!</p>
-              <p className="text-sm text-muted-foreground">Appointment scheduled successfully.</p>
+              <p className="text-base font-semibold">{isReschedule ? "Session rescheduled!" : "Session booked!"}</p>
+              <p className="text-sm text-muted-foreground">
+                {isReschedule ? "Appointment rescheduled successfully." : "Appointment scheduled successfully."}
+              </p>
             </div>
           ) : (
-            <div className="p-5 space-y-5">
+            <div className="flex flex-col min-h-0 flex-1 overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-5">
               {error && (
                 <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>
               )}
@@ -277,9 +335,10 @@ export function SessionSchedulePopup({ planItem, plan, onClose, onSuccess }: Ses
                   </p>
                 </div>
               )}
+              </div>
 
-              {/* Actions */}
-              <div className="flex gap-3 pt-1">
+              {/* Actions - fixed at bottom */}
+              <div className="flex gap-3 px-5 py-4 shrink-0 border-t">
                 <button onClick={onClose} className="flex-1 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted">
                   Cancel
                 </button>
@@ -288,7 +347,11 @@ export function SessionSchedulePopup({ planItem, plan, onClose, onSuccess }: Ses
                   disabled={!selectedDate || !selectedTime || loading}
                   className="flex-1 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  {loading ? <><Loader2 className="size-4 animate-spin" /> Booking...</> : "Confirm Booking"}
+                  {loading ? (
+                    <><Loader2 className="size-4 animate-spin" /> {isReschedule ? "Rescheduling..." : "Booking..."}</>
+                  ) : (
+                    isReschedule ? "Confirm Reschedule" : "Confirm Booking"
+                  )}
                 </button>
               </div>
             </div>

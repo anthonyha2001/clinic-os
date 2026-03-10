@@ -1,4 +1,5 @@
 import { pgClient } from "@/db/index";
+import { auditLog } from "@/lib/services/auditLog";
 
 export interface UpdateAppointmentData {
   start_time?: string;
@@ -40,6 +41,12 @@ function err409(message: string, details?: unknown): never {
   throw e;
 }
 
+function err422(message: string): never {
+  const e = new Error(message) as Error & { statusCode: number };
+  e.statusCode = 422;
+  throw e;
+}
+
 export async function updateAppointment(
   input: UpdateAppointmentInput
 ): Promise<AppointmentRow> {
@@ -53,6 +60,11 @@ export async function updateAppointment(
 
   if (!existing) {
     err404("Appointment not found");
+  }
+
+  const currentStatus = (existing as { status: string }).status;
+  if (!["scheduled", "confirmed"].includes(currentStatus)) {
+    err422(`Cannot modify a ${currentStatus} appointment`);
   }
 
   const ex = existing as {
@@ -135,5 +147,28 @@ export async function updateAppointment(
     RETURNING *
   `;
 
-  return updated as unknown as AppointmentRow;
+  const updatedRow = updated as unknown as AppointmentRow;
+
+  await auditLog({
+    organizationId: orgId,
+    userId: input.changedBy,
+    action: "appointment.updated",
+    entityType: "appointment",
+    entityId: appointmentId,
+    details: {
+      changes: {
+        start_time: data.start_time ?? null,
+        end_time: data.end_time ?? null,
+        provider_id: data.provider_id ?? null,
+        notes: data.notes !== undefined ? data.notes : undefined,
+      },
+      before: {
+        start_time: exFull.start_time,
+        end_time: exFull.end_time,
+        provider_id: exFull.provider_id,
+      },
+    },
+  });
+
+  return updatedRow;
 }

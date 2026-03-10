@@ -26,8 +26,34 @@ export async function calculateRiskScore(
 
   const totalAppointments = Number(agg?.total_appointments ?? 0);
   const noShowCount = Number(agg?.no_show_count ?? 0);
-  // Phase 1 formula intentionally simple and isolated for future swaps.
-  const riskScore = noShowCount;
+
+  // Base score: no-show rate as percentage (0-100)
+  // Minimum 3 appointments before scoring to avoid false positives on new patients
+  const baseRate =
+    totalAppointments >= 3 ? (noShowCount / totalAppointments) * 100 : 0;
+
+  // Fetch recent no-shows (last 90 days) for recency weight
+  const [recentAgg] = await pgClient`
+    SELECT
+      COUNT(*)::int AS recent_total,
+      COUNT(*) FILTER (WHERE status = 'no_show')::int AS recent_no_shows
+    FROM appointments
+    WHERE patient_id = ${patientId}
+      AND organization_id = ${orgId}
+      AND status NOT IN ('draft', 'scheduled', 'confirmed')
+      AND start_time >= now() - interval '90 days'
+  `;
+  const recentTotal = Number(recentAgg?.recent_total ?? 0);
+  const recentNoShows = Number(recentAgg?.recent_no_shows ?? 0);
+  const recentRate =
+    recentTotal >= 2 ? (recentNoShows / recentTotal) * 100 : 0;
+
+  // Final score: 60% weight on overall rate, 40% on recent rate
+  // Rounded to nearest integer, capped at 100
+  const riskScore = Math.min(
+    Math.round(baseRate * 0.6 + recentRate * 0.4),
+    100
+  );
 
   await pgClient`
     INSERT INTO risk_scores (

@@ -85,8 +85,13 @@ export function PlanDetailDrawer({
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [schedulingItem, setSchedulingItem] = useState<PlanItem | null>(null);
+  const [rescheduleAppointment, setRescheduleAppointment] = useState<{
+    id: string;
+    startTime: string;
+    endTime?: string;
+  } | null>(null);
   const [planAppointments, setPlanAppointments] = useState<
-    Record<string, { id: string; startTime: string; status: string }[]>
+    Record<string, { id: string; startTime: string; endTime?: string; status: string }[]>
   >({});
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [sessionLoading, setSessionLoading] = useState<string | null>(null);
@@ -101,19 +106,17 @@ export function PlanDetailDrawer({
       });
   }, [planId]);
 
-  async function refreshAppointments() {
+  async function refreshAppointments(bustCache = false) {
     const today = new Date();
     const ago = new Date(today.getFullYear(), today.getMonth() - 3, 1);
     const ahead = new Date(today.getFullYear(), today.getMonth() + 3, 31);
-    const ar = await fetch(
-      `/api/appointments?start_date=${ago.toISOString()}&end_date=${ahead.toISOString()}`,
-      { credentials: "include" }
-    );
+    const url = `/api/appointments?start_date=${ago.toISOString()}&end_date=${ahead.toISOString()}${bustCache ? `&_t=${Date.now()}` : ""}`;
+    const ar = await fetch(url, { credentials: "include", cache: bustCache ? "no-store" : "default" });
     const ad = await ar.json();
     const appts = Array.isArray(ad) ? ad : (ad.appointments ?? []);
     const byPlanItem: Record<
       string,
-      { id: string; startTime: string; status: string }[]
+      { id: string; startTime: string; endTime?: string; status: string }[]
     > = {};
     for (const a of appts) {
       const pid = a.planItemId ?? a.plan_item_id;
@@ -122,6 +125,7 @@ export function PlanDetailDrawer({
         byPlanItem[pid].push({
           id: a.id,
           startTime: a.startTime ?? a.start_time,
+          endTime: a.endTime ?? a.end_time,
           status: a.status,
         });
       }
@@ -362,7 +366,7 @@ export function PlanDetailDrawer({
                                   {Number(item.unit_price ?? 0).toFixed(2)}/session
                                 </p>
 
-                                {scheduledAppt && (
+                                {scheduledAppt && plan.status !== "canceled" && (
                                   <div className="flex items-center gap-2 flex-wrap mt-1">
                                     <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-xs text-blue-700 font-medium">
                                       <Calendar className="size-3" />
@@ -420,11 +424,22 @@ export function PlanDetailDrawer({
                               </p>
                               {canSchedule && (
                                 <button
-                                  onClick={() => setSchedulingItem(item)}
+                                  onClick={() => {
+                                    setSchedulingItem(item);
+                                    setRescheduleAppointment(
+                                      scheduledAppt
+                                        ? {
+                                            id: scheduledAppt.id,
+                                            startTime: scheduledAppt.startTime,
+                                            endTime: scheduledAppt.endTime,
+                                          }
+                                        : null
+                                    );
+                                  }}
                                   className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
                                 >
                                   <Calendar className="size-3" />
-                                  + Schedule
+                                  {scheduledAppt ? "Reschedule" : "+ Schedule"}
                                 </button>
                               )}
                             </div>
@@ -507,16 +522,34 @@ export function PlanDetailDrawer({
             provider_id: (plan as unknown as Record<string, unknown>).provider_id as string,
             provider: plan.provider,
           }}
-          onClose={() => setSchedulingItem(null)}
-          onSuccess={() => {
+          existingAppointment={rescheduleAppointment}
+          onClose={() => {
             setSchedulingItem(null);
-            fetch(`/api/plans/${planId}`, { credentials: "include" })
+            setRescheduleAppointment(null);
+          }}
+          onSuccess={(createdAppointment) => {
+            setSchedulingItem(null);
+            if (createdAppointment?.plan_item_id) {
+              setPlanAppointments((prev) => {
+                const pid = createdAppointment.plan_item_id!;
+                const list = prev[pid] ?? [];
+                const existingIdx = list.findIndex((a) => a.id === createdAppointment.id);
+                const entry = { id: createdAppointment.id, startTime: createdAppointment.start_time, status: "scheduled" };
+                if (existingIdx >= 0) {
+                  const next = [...list];
+                  next[existingIdx] = { ...next[existingIdx], ...entry };
+                  return { ...prev, [pid]: next };
+                }
+                return { ...prev, [pid]: [entry, ...list] };
+              });
+            }
+            fetch(`/api/plans/${planId}`, { credentials: "include", cache: "no-store" })
               .then((r) => r.json())
               .then((d) => {
                 setPlan(d.plan ?? d);
                 onStatusChange();
               });
-            refreshAppointments();
+            refreshAppointments(true);
           }}
         />
       )}

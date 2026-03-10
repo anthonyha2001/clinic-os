@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withAuth } from "@/lib/auth";
+import { pgClient } from "@/db/index";
 import { getAppointmentsReport } from "@/lib/services/reports/appointments";
 
 const querySchema = z.object({
@@ -40,10 +41,16 @@ export const GET = withAuth(
         );
       }
 
+      const [orgRow] = await pgClient`
+        SELECT timezone FROM organizations WHERE id = ${user.organizationId} LIMIT 1
+      `;
+      const timezone = String(orgRow?.timezone ?? "Asia/Beirut");
+
       const data = await getAppointmentsReport({
         orgId: user.organizationId,
         startDate,
         endDate,
+        timezone,
       });
 
       return NextResponse.json(data);

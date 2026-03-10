@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withAuth } from "@/lib/auth";
+import { pgClient } from "@/db/index";
 import { getRevenue } from "@/lib/services/reports/revenue";
 import { getRevenueByProvider } from "@/lib/services/reports/revenueByProvider";
 import { getRevenueByService } from "@/lib/services/reports/revenueByService";
@@ -59,6 +60,11 @@ export const GET = withAuth(async (request, { user }) => {
       return NextResponse.json({ error: "Date range cannot exceed 365 days" }, { status: 422 });
     }
 
+    const [orgRow] = await pgClient`
+      SELECT timezone FROM organizations WHERE id = ${user.organizationId} LIMIT 1
+    `;
+    const timezone = String(orgRow?.timezone ?? "Asia/Beirut");
+
     const [revenueData, byProvider, byService] = await Promise.all([
       getRevenue({
         orgId: user.organizationId,
@@ -67,6 +73,7 @@ export const GET = withAuth(async (request, { user }) => {
         endDate,
         providerId: parsed.data.provider_id,
         serviceId: parsed.data.service_id,
+        timezone,
       }),
       getRevenueByProvider({
         orgId: user.organizationId,

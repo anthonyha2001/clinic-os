@@ -1,5 +1,6 @@
 import { pgClient } from "@/db/index";
 import { isValidPlanTransition } from "./transitions";
+import { updateAppointmentStatus } from "@/lib/services/appointments/updateStatus";
 
 export interface UpdatePlanStatusInput {
   planId: string;
@@ -82,13 +83,52 @@ export async function updatePlanStatus(input: UpdatePlanStatusInput) {
     return updated;
   };
 
-  if (tx) {
-    return run(tx);
+  const result = tx
+    ? await run(tx)
+    : await pgClient.begin(async (trx) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const runner = trx as any;
+        return run(runner);
+      });
+
+  if (newStatus === "canceled") {
+    await cancelPlanAppointments(planId, orgId, changedBy, reason ?? "Plan canceled");
   }
 
-  return pgClient.begin(async (trx) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const runner = trx as any;
-    return run(runner);
-  });
+  return result;
+}
+
+async function cancelPlanAppointments(
+  planId: string,
+  orgId: string,
+  changedBy: string,
+  reason: string
+) {
+  const planItems = await pgClient`
+    SELECT id FROM plan_items WHERE plan_id = ${planId}
+  `;
+  const planItemIds = planItems.map((r) => (r as { id: string }).id);
+  if (planItemIds.length === 0) return;
+
+  const toCancel = await pgClient`
+    SELECT id, status FROM appointments
+    WHERE organization_id = ${orgId}
+      AND plan_item_id = ANY(${planItemIds}::uuid[])
+      AND status IN ('scheduled', 'confirmed')
+  `;
+
+  for (const row of toCancel) {
+    const appt = row as { id: string; status: string };
+    try {
+      await updateAppointmentStatus({
+        appointmentId: appt.id,
+        newStatus: "canceled",
+        changedBy,
+        reason,
+        orgId,
+      });
+    } catch (e) {
+      console.error(`Failed to cancel appointment ${appt.id} when canceling plan ${planId}:`, e);
+    }
+  }
 }

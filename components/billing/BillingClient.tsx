@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Plus, Printer } from "lucide-react";
+import { Download, Plus, Printer, FileText } from "lucide-react";
 import { useCurrency } from "@/lib/context/CurrencyContext";
 import { QuickPayDrawer } from "./QuickPayDrawer";
 import { InvoicePrintPreview } from "./InvoicePrintPreview";
@@ -26,6 +26,8 @@ const STATUS_OPTIONS = [
   "paid",
   "voided",
 ] as const;
+
+const PAGE_SIZE = 50;
 
 type Invoice = {
   id: string;
@@ -60,12 +62,14 @@ export function BillingClient({
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
 
   const [quickPayInvoice, setQuickPayInvoice] = useState<Invoice | null>(null);
   const [printInvoice, setPrintInvoice] = useState<Invoice | null>(null);
+
   const invoiceUrl = useMemo(() => {
     const params = new URLSearchParams();
     if (statusFilter !== "all") params.set("status", statusFilter);
@@ -86,16 +90,16 @@ export function BillingClient({
   const { data: unpaidData } = useFetch<{
     summary?: { totalUnpaidAmount?: number; totalUnpaidCount?: number };
   }>("/api/reports/unpaid", { ttl: 30_000, initialData: { summary: {} } });
-  const { data: providersData } = useFetch<Record<string, unknown>[] | { providers?: Record<string, unknown>[] }>(
-    "/api/providers",
-    { ttl: 300_000, initialData: [] }
-  );
+  const { data: providersData } = useFetch<
+    Record<string, unknown>[] | { providers?: Record<string, unknown>[] }
+  >("/api/providers", { ttl: 300_000, initialData: [] });
 
   useEffect(() => {
     const rawInvoices = Array.isArray(invoicesData)
       ? invoicesData
       : invoicesData?.invoices ?? [];
     setInvoices(Array.isArray(rawInvoices) ? rawInvoices : []);
+    setPage(1);
   }, [invoicesData]);
 
   useEffect(() => {
@@ -112,6 +116,11 @@ export function BillingClient({
     setProviders(Array.isArray(raw) ? raw : []);
   }, [providersData]);
 
+  // Reset page when search changes
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
+
   const filtered = invoices.filter((inv) => {
     if (!search) return true;
     const q = search.toLowerCase();
@@ -121,6 +130,9 @@ export function BillingClient({
       inv.patient?.last_name?.toLowerCase().includes(q)
     );
   });
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
@@ -143,8 +155,9 @@ export function BillingClient({
     const confirm = window.confirm(`Void ${selectedIds.size} invoice(s)?`);
     if (!confirm) return;
     setBulkLoading(true);
+    const ids = Array.from(selectedIds);
     await Promise.all(
-      [...selectedIds].map((id) =>
+      ids.map((id) =>
         fetch(`/api/invoices/${id}/status`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -160,8 +173,9 @@ export function BillingClient({
   }
 
   function exportCSV() {
+    const ids = Array.from(selectedIds);
     const rows = filtered
-      .filter((inv) => selectedIds.size === 0 || selectedIds.has(inv.id))
+      .filter((inv) => ids.length === 0 || ids.includes(inv.id))
       .map((inv) => [
         inv.invoice_number,
         `${inv.patient?.first_name ?? ""} ${inv.patient?.last_name ?? ""}`.trim(),
@@ -209,7 +223,7 @@ export function BillingClient({
           <h1 className="list-page-title">Billing</h1>
           {!hideFinancialSummary && (
             <p className="list-page-subtitle">
-              {summary.totalUnpaidCount} unpaid ·{" "}
+              {summary.totalUnpaidCount} unpaid &middot;{" "}
               <span className="text-orange-600 font-medium">
                 {format(summary.totalUnpaidAmount)}
               </span>{" "}
@@ -246,19 +260,24 @@ export function BillingClient({
               ? null
               : invoices
                   .filter((i) => i.status === status)
-                  .reduce(
-                    (s, i) => s + Number(i.balance_due ?? i.total),
-                    0
-                  );
+                  .reduce((s, i) => s + Number(i.balance_due ?? i.total), 0);
           return (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
-              className={`rounded-xl border p-3 text-start transition-colors hover:bg-muted/50 ${statusFilter === status ? "border-primary bg-primary/5" : "bg-card"}`}
+              className={`rounded-xl border p-3 text-start transition-colors hover:bg-muted/50 ${
+                statusFilter === status
+                  ? "border-primary bg-primary/5"
+                  : "bg-card"
+              }`}
             >
               <p className="text-xl font-bold">{count}</p>
               <span
-                className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-xs font-medium capitalize ${status === "all" ? "bg-gray-100 text-gray-600" : STATUS_COLORS[status]}`}
+                className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
+                  status === "all"
+                    ? "bg-gray-100 text-gray-600"
+                    : STATUS_COLORS[status]
+                }`}
               >
                 {status.replace("_", " ")}
               </span>
@@ -363,30 +382,14 @@ export function BillingClient({
                   className="rounded"
                 />
               </th>
-              <th className="px-5 py-3 text-start">
-                Invoice
-              </th>
-              <th className="px-5 py-3 text-start">
-                Patient
-              </th>
-              <th className="px-5 py-3 text-start">
-                Provider
-              </th>
-              <th className="px-5 py-3 text-start">
-                Date
-              </th>
-              <th className="px-5 py-3 text-end">
-                Total
-              </th>
-              <th className="px-5 py-3 text-end">
-                Balance
-              </th>
-              <th className="px-5 py-3 text-start">
-                Status
-              </th>
-              <th className="px-5 py-3 text-start">
-                Actions
-              </th>
+              <th className="px-5 py-3 text-start">Invoice</th>
+              <th className="px-5 py-3 text-start">Patient</th>
+              <th className="px-5 py-3 text-start">Provider</th>
+              <th className="px-5 py-3 text-start">Date</th>
+              <th className="px-5 py-3 text-end">Total</th>
+              <th className="px-5 py-3 text-end">Balance</th>
+              <th className="px-5 py-3 text-start">Status</th>
+              <th className="px-5 py-3 text-start">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -402,26 +405,43 @@ export function BillingClient({
               ))
             ) : filtered.length === 0 ? (
               <tr>
-                <td
-                  colSpan={9}
-                  className="px-5 py-12 text-center text-muted-foreground"
-                >
-                  {hasActiveFilters
-                    ? "No invoices match your filters."
-                    : "No invoices found."}
+                <td colSpan={9} className="px-5 py-16 text-center">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
+                      <FileText className="size-6 text-muted-foreground" />
+                    </div>
+                    <p className="text-muted-foreground font-medium">
+                      {hasActiveFilters
+                        ? "No invoices match your filters."
+                        : "No invoices yet."}
+                    </p>
+                    {!hasActiveFilters && (
+                      <button
+                        onClick={() => router.push(`/${locale}/billing/new`)}
+                        className="app-btn-primary flex items-center gap-1.5 px-4 py-2 text-sm font-medium"
+                      >
+                        <Plus className="size-4" />
+                        Create your first invoice
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ) : (
-              filtered.map((inv) => {
+              paginated.map((inv) => {
                 const overdue = isOverdue(inv);
                 const providerName =
                   inv.provider?.user?.full_name ??
                   inv.provider?.full_name ??
-                  "—";
+                  "\u2014";
                 return (
                   <tr
                     key={inv.id}
-                    className={`border-b transition-colors ${overdue ? "bg-orange-50/40 dark:bg-orange-950/10" : "hover:bg-muted/30"} ${selectedIds.has(inv.id) ? "bg-primary/5" : ""}`}
+                    className={`border-b transition-colors ${
+                      overdue
+                        ? "bg-orange-50/40 dark:bg-orange-950/10"
+                        : "hover:bg-muted/30"
+                    } ${selectedIds.has(inv.id) ? "bg-primary/5" : ""}`}
                   >
                     <td
                       className="px-5 py-3.5"
@@ -445,7 +465,7 @@ export function BillingClient({
                       </p>
                       {overdue && (
                         <span className="text-xs text-orange-600 font-medium">
-                          ⚠ Overdue
+                          &#9888; Overdue
                         </span>
                       )}
                     </td>
@@ -472,16 +492,22 @@ export function BillingClient({
                         year: "numeric",
                       })}
                     </td>
-                    <td className="px-5 py-3.5 text-end">
-                      {format(inv.total)}
-                    </td>
+                    <td className="px-5 py-3.5 text-end">{format(inv.total)}</td>
                     <td
-                      className={`px-5 py-3.5 text-end font-semibold ${Number(inv.balance_due) > 0 ? "text-orange-600" : "text-green-600"}`}
+                      className={`px-5 py-3.5 text-end font-semibold ${
+                        Number(inv.balance_due) > 0
+                          ? "text-orange-600"
+                          : "text-green-600"
+                      }`}
                     >
                       {format(inv.balance_due)}
                     </td>
                     <td className="px-5 py-3.5">
-                      <span className={`${STATUS_COLORS[inv.status] ?? "app-badge app-badge-neutral"}`}>
+                      <span
+                        className={`${
+                          STATUS_COLORS[inv.status] ?? "app-badge app-badge-neutral"
+                        }`}
+                      >
                         {inv.status.replace("_", " ")}
                       </span>
                     </td>
@@ -514,23 +540,49 @@ export function BillingClient({
         </table>
 
         {filtered.length > 0 && (
-          <div className="px-5 py-3 border-t bg-muted/30 flex justify-between text-sm">
+          <div className="px-5 py-3 border-t bg-muted/30 flex flex-wrap items-center justify-between gap-3 text-sm">
             <span className="text-muted-foreground">
               {filtered.length} invoices
+              {totalPages > 1 &&
+                ` — page ${page} of ${totalPages}`}
             </span>
-            <div className="flex gap-6">
-              <span>
-                Total:{" "}
-                <span className="font-semibold">
-                  {format(filtered.reduce((s, i) => s + Number(i.total), 0))}
+            <div className="flex items-center gap-4">
+              <div className="flex gap-6">
+                <span>
+                  Total:{" "}
+                  <span className="font-semibold">
+                    {format(
+                      filtered.reduce((s, i) => s + Number(i.total), 0)
+                    )}
+                  </span>
                 </span>
-              </span>
-              <span>
-                Outstanding:{" "}
-                <span className="font-semibold text-orange-600">
-                  {format(filtered.reduce((s, i) => s + Number(i.balance_due), 0))}
+                <span>
+                  Outstanding:{" "}
+                  <span className="font-semibold text-orange-600">
+                    {format(
+                      filtered.reduce((s, i) => s + Number(i.balance_due), 0)
+                    )}
+                  </span>
                 </span>
-              </span>
+              </div>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    className="rounded-lg border px-2.5 py-1 text-xs font-medium hover:bg-muted disabled:opacity-40"
+                  >
+                    Prev
+                  </button>
+                  <button
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page === totalPages}
+                    className="rounded-lg border px-2.5 py-1 text-xs font-medium hover:bg-muted disabled:opacity-40"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}

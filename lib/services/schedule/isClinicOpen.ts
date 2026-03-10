@@ -1,3 +1,4 @@
+import { toZonedTime, fromZonedTime } from "date-fns-tz";
 import type { WorkingHours, OffDay, DayKey } from "@/types/schedule";
 import { DEFAULT_WORKING_HOURS } from "@/types/schedule";
 
@@ -40,23 +41,28 @@ export interface IsClinicOpenResult {
 export function isClinicOpen(
   workingHours: WorkingHours | null | undefined,
   offDays: OffDay[] | null | undefined,
-  date: Date
+  date: Date,
+  timezone: string = "Asia/Beirut"
 ): IsClinicOpenResult {
   const wh = workingHours ?? DEFAULT_WORKING_HOURS;
   const od = offDays ?? [];
 
-  const dayKey = DAY_MAP[date.getDay()];
+  // Convert UTC date to org's local timezone
+  const zonedDate = toZonedTime(date, timezone);
+
+  const dayKey = DAY_MAP[zonedDate.getDay()];
   const schedule = wh[dayKey];
   if (!schedule?.open) {
     return { open: false, reason: "Clinic is closed on this day" };
   }
 
-  const off = od.find((o) => isDateMatch(o, date));
+  // Check off days using zoned date
+  const off = od.find((o) => isDateMatch(o, zonedDate));
   if (off) {
     return { open: false, reason: off.label };
   }
 
-  const mins = date.getHours() * 60 + date.getMinutes();
+  const mins = zonedDate.getHours() * 60 + zonedDate.getMinutes();
   const fromMins = parseTime(schedule.from);
   const toMins = parseTime(schedule.to);
 
@@ -71,7 +77,10 @@ export function isClinicOpen(
     const breakFrom = parseTime(schedule.break_from);
     const breakTo = parseTime(schedule.break_to);
     if (mins >= breakFrom && mins < breakTo) {
-      return { open: false, reason: `Break: ${schedule.break_from} - ${schedule.break_to}` };
+      return {
+        open: false,
+        reason: `Break: ${schedule.break_from} - ${schedule.break_to}`,
+      };
     }
   }
 
@@ -83,15 +92,17 @@ export function getAvailableSlots(
   offDays: OffDay[] | null | undefined,
   date: Date,
   slotDurationMinutes: number,
-  existingAppointments: { start: Date; end: Date }[] = []
+  existingAppointments: { start: Date; end: Date }[] = [],
+  timezone: string = "Asia/Beirut"
 ): Date[] {
   const wh = workingHours ?? DEFAULT_WORKING_HOURS;
   const od = offDays ?? [];
 
-  const dayKey = DAY_MAP[date.getDay()];
+  const zonedDate = toZonedTime(date, timezone);
+  const dayKey = DAY_MAP[zonedDate.getDay()];
   const schedule = wh[dayKey];
   if (!schedule?.open) return [];
-  const offDay = od.find((o) => isDateMatch(o, date));
+  const offDay = od.find((o) => isDateMatch(o, zonedDate));
   if (offDay) return [];
 
   const fromMins = parseTime(schedule.from);
@@ -100,16 +111,38 @@ export function getAvailableSlots(
   const breakTo = schedule.break_to ? parseTime(schedule.break_to) : null;
 
   const slots: Date[] = [];
-  const year = date.getFullYear();
-  const month = date.getMonth();
-  const day = date.getDate();
+  const year = zonedDate.getFullYear();
+  const month = zonedDate.getMonth();
+  const day = zonedDate.getDate();
 
-  for (let m = fromMins; m + slotDurationMinutes <= toMins; m += slotDurationMinutes) {
-    if (breakFrom !== null && breakTo !== null && m < breakTo && m + slotDurationMinutes > breakFrom) {
+  for (
+    let m = fromMins;
+    m + slotDurationMinutes <= toMins;
+    m += slotDurationMinutes
+  ) {
+    if (
+      breakFrom !== null &&
+      breakTo !== null &&
+      m < breakTo &&
+      m + slotDurationMinutes > breakFrom
+    ) {
       continue;
     }
-    const slotStart = new Date(year, month, day, Math.floor(m / 60), m % 60, 0, 0);
-    const slotEnd = new Date(slotStart.getTime() + slotDurationMinutes * 60 * 1000);
+
+    // Build slot time in org timezone, then convert back to UTC
+    const slotStartZoned = new Date(
+      year,
+      month,
+      day,
+      Math.floor(m / 60),
+      m % 60,
+      0,
+      0
+    );
+    const slotStart = fromZonedTime(slotStartZoned, timezone);
+    const slotEnd = new Date(
+      slotStart.getTime() + slotDurationMinutes * 60 * 1000
+    );
 
     const overlaps = existingAppointments.some(
       (apt) => slotStart < apt.end && slotEnd > apt.start
@@ -121,8 +154,10 @@ export function getAvailableSlots(
 
 export function getOffDayForDate(
   offDays: OffDay[] | null | undefined,
-  date: Date
+  date: Date,
+  timezone: string = "Asia/Beirut"
 ): OffDay | null {
   const od = offDays ?? [];
-  return od.find((o) => isDateMatch(o, date)) ?? null;
+  const zonedDate = toZonedTime(date, timezone);
+  return od.find((o) => isDateMatch(o, zonedDate)) ?? null;
 }

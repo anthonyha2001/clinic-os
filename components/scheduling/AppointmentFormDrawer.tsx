@@ -130,7 +130,11 @@ export function AppointmentFormDrawer({
   });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [scheduleSettings, setScheduleSettings] = useState<{ working_hours?: WorkingHours; off_days?: OffDay[] } | null>(null);
+  const [scheduleSettings, setScheduleSettings] = useState<{
+    working_hours?: WorkingHours;
+    off_days?: OffDay[];
+    timezone?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (providersProp && providersProp.length > 0) return;
@@ -186,7 +190,13 @@ export function AppointmentFormDrawer({
   useEffect(() => {
     fetch("/api/settings", { credentials: "include" })
       .then((r) => r.json())
-      .then((d) => setScheduleSettings({ working_hours: d?.working_hours, off_days: d?.off_days }))
+      .then((d) =>
+        setScheduleSettings({
+          working_hours: d?.working_hours,
+          off_days: d?.off_days,
+          timezone: d?.timezone ?? "Asia/Beirut",
+        })
+      )
       .catch(() => {});
   }, []);
 
@@ -316,10 +326,23 @@ export function AppointmentFormDrawer({
   const serviceLabel = (s: ServiceOption) => s.name_en ?? s.nameEn ?? s.id;
 
   const startDate = form.start_time ? new Date(form.start_time) : null;
-  const openResult = startDate && scheduleSettings
-    ? isClinicOpen(scheduleSettings.working_hours, scheduleSettings.off_days, startDate)
-    : null;
-  const offDay = startDate && scheduleSettings ? getOffDayForDate(scheduleSettings.off_days, startDate) : null;
+  const openResult =
+    startDate && scheduleSettings
+      ? isClinicOpen(
+          scheduleSettings.working_hours,
+          scheduleSettings.off_days,
+          startDate,
+          scheduleSettings.timezone ?? "Asia/Beirut"
+        )
+      : null;
+  const offDay =
+    startDate && scheduleSettings
+      ? getOffDayForDate(
+          scheduleSettings.off_days,
+          startDate,
+          scheduleSettings.timezone ?? "Asia/Beirut"
+        )
+      : null;
 
   return (
     <>

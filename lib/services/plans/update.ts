@@ -55,6 +55,19 @@ export async function updatePlan(input: UpdatePlanInput) {
     err422("Plan cannot be edited in current status");
   }
 
+  // Secondary guard: even in accepted status, block item replacement if sessions exist
+  if (data.items !== undefined) {
+    const [earlyCheck] = await pgClient`
+      SELECT COUNT(*)::int AS completed_count
+      FROM plan_items
+      WHERE plan_id = ${planId}
+        AND quantity_completed > 0
+    `;
+    if (Number(earlyCheck?.completed_count ?? 0) > 0) {
+      err422("Cannot replace plan items — some sessions have already been completed.");
+    }
+  }
+
   if (data.items !== undefined) {
     if (data.items.length === 0) {
       err422("At least one plan item is required");
@@ -97,7 +110,19 @@ export async function updatePlan(input: UpdatePlanInput) {
     `;
 
     if (data.items !== undefined) {
-      // Full-replace behavior: callers must send the complete desired items array.
+      // Check if any items have completed sessions — block full replace if so
+      const [completedCheck] = await sql`
+        SELECT COUNT(*)::int AS completed_count
+        FROM plan_items
+        WHERE plan_id = ${planId}
+          AND quantity_completed > 0
+      `;
+      if (Number(completedCheck?.completed_count ?? 0) > 0) {
+        err422(
+          "Cannot replace plan items — some sessions have already been completed. Edit individual items instead."
+        );
+      }
+
       await sql`
         DELETE FROM plan_items
         WHERE plan_id = ${planId}

@@ -1,9 +1,11 @@
+import { toZonedTime } from "date-fns-tz";
 import { pgClient } from "@/db/index";
 
 interface GetAppointmentsReportInput {
   orgId: string;
   startDate: string;
   endDate: string;
+  timezone?: string;
 }
 
 function safeDivide(a: number, b: number): number {
@@ -11,7 +13,8 @@ function safeDivide(a: number, b: number): number {
 }
 
 export async function getAppointmentsReport(input: GetAppointmentsReportInput) {
-  const { orgId, startDate, endDate } = input;
+  const { orgId, startDate, endDate, timezone } = input;
+  const tz = timezone ?? "Asia/Beirut";
 
   const rows = await pgClient`
     SELECT
@@ -42,8 +45,8 @@ export async function getAppointmentsReport(input: GetAppointmentsReportInput) {
     const status = String(row.status ?? "scheduled").toLowerCase();
     byStatusMap.set(status, (byStatusMap.get(status) ?? 0) + 1);
 
-    const start = new Date(row.start_time as string | Date);
-    const hour = start.getUTCHours();
+    const start = toZonedTime(new Date(row.start_time as string | Date), tz);
+    const hour = start.getHours();
     byHourMap.set(hour, (byHourMap.get(hour) ?? 0) + 1);
 
     const providerId = String(row.provider_id ?? "unknown");

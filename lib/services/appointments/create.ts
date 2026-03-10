@@ -1,6 +1,7 @@
 import { pgClient } from "@/db/index";
 import type { CreateAppointment } from "@/lib/validations/appointment";
 import { checkDepositRequired } from "@/lib/services/noshow/checkDeposit";
+import { auditLog } from "@/lib/services/auditLog";
 
 export interface ResolvedLine {
   service_id: string;
@@ -204,7 +205,7 @@ export async function createAppointment(
     }
     const appointmentPlanItemId = linkedPlanItemIds[0] ?? null;
 
-    const result = await pgClient.begin(async (tx) => {
+    const result = await (pgClient as { begin: (cb: (tx: unknown) => Promise<CreatedAppointment>) => Promise<CreatedAppointment> }).begin(async (tx) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sql = tx as any;
       const [appt] = await sql`
@@ -244,6 +245,21 @@ export async function createAppointment(
         )
         VALUES (${appt.id}, null, 'scheduled', ${userId})
       `;
+
+      await auditLog({
+        organizationId: orgId,
+        userId: userId,
+        action: "appointment.created",
+        entityType: "appointment",
+        entityId: appt.id,
+        details: {
+          patient_id: input.patient_id,
+          provider_id: input.provider_id,
+          start_time: input.start_time,
+          deposit_required: depositRequired,
+        },
+        tx: sql,
+      });
 
       return {
         ...appt,

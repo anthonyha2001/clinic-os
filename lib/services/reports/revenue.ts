@@ -1,3 +1,4 @@
+import { toZonedTime } from "date-fns-tz";
 import { pgClient } from "@/db/index";
 
 export type RevenueGroupBy = "day" | "week" | "month";
@@ -9,6 +10,7 @@ interface GetRevenueInput {
   endDate: string;
   providerId?: string;
   serviceId?: string;
+  timezone?: string;
 }
 
 interface MethodBreakdown {
@@ -47,8 +49,30 @@ function periodIso(date: Date): string {
   return date.toISOString();
 }
 
+/** Get period key for a zoned date (uses local getters which are timezone-aware from toZonedTime) */
+function getPeriodKeyZoned(
+  zonedDate: Date,
+  groupBy: RevenueGroupBy
+): string {
+  const y = zonedDate.getFullYear();
+  const m = String(zonedDate.getMonth() + 1).padStart(2, "0");
+  const d = String(zonedDate.getDate()).padStart(2, "0");
+  if (groupBy === "day") return `${y}-${m}-${d}`;
+  if (groupBy === "month") return `${y}-${m}`;
+  // week: get Monday of the week
+  const day = zonedDate.getDay();
+  const diffToMonday = (day + 6) % 7;
+  const monday = new Date(zonedDate);
+  monday.setDate(zonedDate.getDate() - diffToMonday);
+  const my = monday.getFullYear();
+  const mm = String(monday.getMonth() + 1).padStart(2, "0");
+  const md = String(monday.getDate()).padStart(2, "0");
+  return `${my}-${mm}-${md}`;
+}
+
 export async function getRevenue(input: GetRevenueInput) {
-  const { orgId, groupBy, startDate, endDate, providerId, serviceId } = input;
+  const { orgId, groupBy, startDate, endDate, providerId, serviceId, timezone } = input;
+  const tz = timezone ?? "Asia/Beirut";
 
   const rows = await pgClient`
     SELECT
@@ -66,6 +90,7 @@ export async function getRevenue(input: GetRevenueInput) {
       AND p.created_at <= ${endDate}::timestamptz
       AND (
         ${providerId ?? null}::uuid IS NULL
+        OR i.appointment_id IS NULL
         OR EXISTS (
           SELECT 1
           FROM appointments a
@@ -93,7 +118,9 @@ export async function getRevenue(input: GetRevenueInput) {
     { totalRevenue: number; paymentIds: Set<string>; methods: Map<string, MethodBreakdown> }
   >();
   for (let cursor = new Date(start); cursor <= end; cursor = nextPeriod(cursor, groupBy)) {
-    periodMap.set(periodIso(cursor), {
+    const zonedCursor = toZonedTime(cursor, tz);
+    const key = getPeriodKeyZoned(zonedCursor, groupBy);
+    periodMap.set(key, {
       totalRevenue: 0,
       paymentIds: new Set<string>(),
       methods: new Map<string, MethodBreakdown>(),
@@ -105,8 +132,8 @@ export async function getRevenue(input: GetRevenueInput) {
   let summaryRevenue = 0;
 
   for (const row of rows) {
-    const createdAt = new Date(row.created_at as string | Date);
-    const bucket = periodIso(toPeriodStart(createdAt, groupBy));
+    const createdAt = toZonedTime(new Date(row.created_at as string | Date), tz);
+    const bucket = getPeriodKeyZoned(createdAt, groupBy);
     const amount = Number(row.allocation_amount ?? 0);
     const paymentId = String(row.payment_id);
     const methodType = String(row.method_type ?? "unknown");

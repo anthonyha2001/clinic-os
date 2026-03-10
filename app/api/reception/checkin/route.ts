@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { withAuth } from "@/lib/auth";
 import { pgClient } from "@/db/index";
+import { updateAppointmentStatus } from "@/lib/services/appointments/updateStatus";
+
+const checkinSchema = z.object({
+  appointment_id: z.string().uuid(),
+  notes: z.string().max(500).optional().nullable(),
+});
 
 // GET — today's waiting room
 export const GET = withAuth(async (request, { user }) => {
@@ -68,18 +75,17 @@ export const GET = withAuth(async (request, { user }) => {
 // POST — check in a patient
 export const POST = withAuth(async (request, { user }) => {
   const body = await request.json();
-  const appointment_id = body?.appointment_id;
-  const notes = body?.notes;
-
-  if (!appointment_id) {
+  const parsed = checkinSchema.safeParse(body);
+  if (!parsed.success) {
     return NextResponse.json(
-      { error: "appointment_id required" },
+      { error: "Validation failed", details: parsed.error.issues },
       { status: 422 }
     );
   }
+  const { appointment_id, notes } = parsed.data;
 
   const [appt] = await pgClient`
-    SELECT id, patient_id FROM appointments
+    SELECT id, patient_id, status FROM appointments
     WHERE id = ${appointment_id} AND organization_id = ${user.organizationId}
   `;
   if (!appt) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -92,10 +98,16 @@ export const POST = withAuth(async (request, { user }) => {
     RETURNING id, appointment_id, patient_id, status, checked_in_at
   `;
 
-  await pgClient`
-    UPDATE appointments SET status = 'confirmed', updated_at = now()
-    WHERE id = ${appointment_id} AND status = 'scheduled'
-  `;
+  const apptFull = appt as { patient_id: string; status: string };
+  if (apptFull.status === "scheduled") {
+    await updateAppointmentStatus({
+      appointmentId: appointment_id,
+      newStatus: "confirmed",
+      changedBy: user.id,
+      reason: "Patient checked in at reception",
+      orgId: user.organizationId,
+    });
+  }
 
   return NextResponse.json(checkin, { status: 201 });
 });

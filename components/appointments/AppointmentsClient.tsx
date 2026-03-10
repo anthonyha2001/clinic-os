@@ -95,7 +95,7 @@ type PatientFile = {
     status: string;
     notes: string;
   }[];
-  clinical_notes: {
+  clinical_notes?: {
     note_date: string;
     chief_complaint: string;
     treatment_done: string;
@@ -496,11 +496,18 @@ export function AppointmentsClient({
     const style = document.createElement("style");
     style.id = "appointments-print-styles";
     style.textContent = `
-      @media print {
-        body > * { display: none !important; }
-        #patient-file-print { display: block !important; }
-      }
       #patient-file-print { display: none; }
+      @media print {
+        body * { visibility: hidden; }
+        #patient-file-print, #patient-file-print * { visibility: visible; }
+        #patient-file-print {
+          display: block !important;
+          position: absolute !important;
+          left: 0 !important;
+          top: 0 !important;
+          width: 100% !important;
+        }
+      }
     `;
     document.head.appendChild(style);
     return () => {
@@ -945,18 +952,22 @@ export function AppointmentsClient({
                       View Patient
                     </button>
 
-                    <div className="h-px bg-border mx-2 my-1" />
-                    <button
-                      onClick={() => {
-                        setCancelTarget(item);
-                        setOpenMenuId(null);
-                        setMenuPosition(null);
-                      }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-red-50 transition-colors text-left text-red-600"
-                    >
-                      <X className="size-3.5" />
-                      Cancel Appointment
-                    </button>
+                    {!["completed", "canceled"].includes(item.appointment_status ?? "") && (
+                      <>
+                        <div className="h-px bg-border mx-2 my-1" />
+                        <button
+                          onClick={() => {
+                            setCancelTarget(item);
+                            setOpenMenuId(null);
+                            setMenuPosition(null);
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-red-50 transition-colors text-left text-red-600"
+                        >
+                          <X className="size-3.5" />
+                          Cancel Appointment
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -1717,7 +1728,7 @@ export function AppointmentsClient({
         </>
       )}
 
-      <div id="patient-file-print" className="p-8 max-w-4xl mx-auto">
+      <div id="patient-file-print" className="p-8 max-w-4xl mx-auto bg-white">
         {patientFile && (
           <>
             <div className="flex items-center justify-between border-b pb-4 mb-6">
@@ -1725,11 +1736,64 @@ export function AppointmentsClient({
                 <h1 className="text-2xl font-bold">Patient Medical File</h1>
                 <p className="text-gray-500">{filePatientName}</p>
               </div>
+              <div className="text-right text-sm text-gray-400">
+                <p>Printed: {new Date().toLocaleDateString()}</p>
+              </div>
             </div>
-            <div>
-              <h2 className="font-bold mb-2 text-sm uppercase text-gray-500 border-b pb-1">
-                Visit History
-              </h2>
+
+            <div className="grid grid-cols-2 gap-6 mb-6">
+              <div>
+                <h2 className="font-bold mb-2 text-sm uppercase text-gray-500">Patient Info</h2>
+                <p><strong>Name:</strong> {String(patientFile.patient.first_name ?? "")} {String(patientFile.patient.last_name ?? "")}</p>
+                <p><strong>Phone:</strong> {String(patientFile.patient.phone ?? "—")}</p>
+                <p><strong>DOB:</strong> {patientFile.patient.date_of_birth ? new Date(patientFile.patient.date_of_birth as string).toLocaleDateString() : "—"}</p>
+                <p><strong>Gender:</strong> {(patientFile.patient.gender as string) || "—"}</p>
+                <p><strong>Email:</strong> {(patientFile.patient.email as string) || "—"}</p>
+                <p><strong>Address:</strong> {(patientFile.patient.address as string) || "—"}</p>
+              </div>
+              {patientFile.medical_history && (
+                <div>
+                  <h2 className="font-bold mb-2 text-sm uppercase text-gray-500">Medical Alerts</h2>
+                  {(patientFile.medical_history.allergies as string[] ?? []).length > 0 && (
+                    <p className="text-red-600"><strong>⚠️ Allergies:</strong> {(patientFile.medical_history.allergies as string[]).join(", ")}</p>
+                  )}
+                  {!!patientFile.medical_history.diabetic && <p className="text-red-600">⚠️ Diabetic</p>}
+                  {!!patientFile.medical_history.heart_condition && <p className="text-red-600">⚠️ Heart Condition</p>}
+                  {!!patientFile.medical_history.hypertensive && <p className="text-red-600">⚠️ Hypertensive</p>}
+                  <p><strong>Blood Type:</strong> {(patientFile.medical_history.blood_type as string) || "Unknown"}</p>
+                  <p><strong>Smoker:</strong> {patientFile.medical_history.smoking ? "Yes" : "No"}</p>
+                </div>
+              )}
+            </div>
+
+            {(patientFile.clinical_notes?.length ?? 0) > 0 && (
+              <div className="mb-6">
+                <h2 className="font-bold mb-2 text-sm uppercase text-gray-500 border-b pb-1">Clinical Notes</h2>
+                {(patientFile.clinical_notes ?? []).map((note, i) => (
+                  <div key={i} className="mb-3 pb-3 border-b">
+                    <p className="text-sm font-semibold">{new Date(note.note_date).toLocaleDateString()} — {note.written_by_name}</p>
+                    {note.chief_complaint && <p className="text-sm">Complaint: {note.chief_complaint}</p>}
+                    {note.treatment_done && <p className="text-sm">Treatment: {note.treatment_done}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {patientFile.dental_chart.length > 0 && (
+              <div className="mb-6">
+                <h2 className="font-bold mb-2 text-sm uppercase text-gray-500 border-b pb-1">Dental Chart</h2>
+                <div className="flex flex-wrap gap-2">
+                  {patientFile.dental_chart.map((tooth) => (
+                    <span key={tooth.tooth_number} className="text-xs px-2 py-0.5 rounded border">
+                      {tooth.tooth_number}: {tooth.conditions[0] ?? "—"}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="mb-6">
+              <h2 className="font-bold mb-2 text-sm uppercase text-gray-500 border-b pb-1">Visit History ({patientFile.appointments.length})</h2>
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="border-b">
@@ -1742,9 +1806,7 @@ export function AppointmentsClient({
                 <tbody>
                   {patientFile.appointments.map((appt, i) => (
                     <tr key={i} className="border-b">
-                      <td className="py-1 pr-4">
-                        {new Date(appt.start_time).toLocaleDateString()}
-                      </td>
+                      <td className="py-1 pr-4">{new Date(appt.start_time).toLocaleDateString()}</td>
                       <td className="py-1 pr-4">{appt.service_name || "—"}</td>
                       <td className="py-1 pr-4">{appt.provider_name}</td>
                       <td className="py-1 capitalize">{appt.status}</td>

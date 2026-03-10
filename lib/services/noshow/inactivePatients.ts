@@ -83,6 +83,7 @@ export async function getInactivePatients(
       ON fb.patient_id = p.id
     WHERE p.organization_id = ${orgId}
       AND p.is_active = true
+      AND p.deleted_at IS NULL
       AND fb.patient_id IS NULL
       AND FLOOR(EXTRACT(EPOCH FROM (now() - lc.last_visit)) / 86400)::int >= ${warningDays}
     ORDER BY lc.last_visit ASC

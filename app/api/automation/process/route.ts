@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { pgClient } from "@/db/index";
 import { sendAppointmentReminders } from "@/lib/automation/handlers/appointmentReminder";
 import { sendNoShowFollowups } from "@/lib/automation/handlers/noShowFollowup";
 import { runRecallEngine } from "@/lib/automation/handlers/recallEngine";
@@ -10,17 +11,34 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const [reminders, noShows, recalls] = await Promise.all([
-      sendAppointmentReminders(),
-      sendNoShowFollowups(),
-      runRecallEngine(),
-    ]);
+    // Fetch all active orgs
+    const orgs = await pgClient`
+      SELECT id FROM organizations
+      WHERE is_active = true
+    `;
+
+    const results: Record<string, unknown>[] = [];
+
+    for (const org of orgs) {
+      const orgId = String(org.id);
+      try {
+        const [reminders, noShows, recalls] = await Promise.all([
+          sendAppointmentReminders(orgId).catch((e) => ({ error: String(e) })),
+          sendNoShowFollowups(orgId).catch((e) => ({ error: String(e) })),
+          runRecallEngine(orgId).catch((e) => ({ error: String(e) })),
+        ]);
+        results.push({ orgId, reminders, noShows, recalls });
+      } catch (orgErr) {
+        // One org failing must never block others
+        console.error(`Automation failed for org ${orgId}:`, orgErr);
+        results.push({ orgId, error: String(orgErr) });
+      }
+    }
 
     return NextResponse.json({
       ok: true,
-      reminders,
-      no_show_followups: noShows,
-      recalls,
+      processed: results.length,
+      results,
       ran_at: new Date().toISOString(),
     });
   } catch (e) {

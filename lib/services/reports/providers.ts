@@ -4,6 +4,7 @@ interface GetProvidersReportInput {
   orgId: string;
   startDate: string;
   endDate: string;
+  timezone?: string;
 }
 
 function safeDivide(a: number, b: number): number {

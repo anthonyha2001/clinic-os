@@ -1,6 +1,7 @@
 import { pgClient } from "@/db/index";
 import { isValidTransition } from "./transitions";
 import { calculateRiskScore } from "@/lib/services/noshow/calculateRisk";
+import { auditLog } from "@/lib/services/auditLog";
 
 export interface UpdateStatusInput {
   appointmentId: string;
@@ -57,7 +58,7 @@ export async function updateAppointmentStatus(
     );
   }
 
-  const result = await pgClient.begin(async (tx) => {
+  const result = await (pgClient as { begin: (cb: (tx: unknown) => Promise<unknown>) => Promise<unknown> }).begin(async (tx) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sql = tx as any;
 
@@ -81,12 +82,29 @@ export async function updateAppointmentStatus(
       )
     `;
 
+    await auditLog({
+      organizationId: orgId,
+      userId: changedBy,
+      action: `appointment.${newStatus}`,
+      entityType: "appointment",
+      entityId: appointmentId,
+      details: {
+        previous_status: currentStatus,
+        new_status: newStatus,
+        reason: reason ?? null,
+      },
+      tx: sql,
+    });
+
     return updated;
   });
 
-  if (newStatus === "no_show") {
+  if (newStatus === "no_show" || newStatus === "completed") {
     const patientId = (existing as { patient_id: string }).patient_id;
-    await calculateRiskScore(patientId, orgId);
+    // Fire and forget — don't block the response on risk recalculation
+    calculateRiskScore(patientId, orgId).catch((e) =>
+      console.error("Risk score recalculation failed:", e)
+    );
   }
 
   return result as AppointmentRow;

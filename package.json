@@ -35,8 +35,10 @@
     "create-xrays-bucket": "tsx scripts/create-xrays-bucket.ts"
   },
   "dependencies": {
+    "@sentry/nextjs": "^10.43.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.95.3",
+    "date-fns-tz": "^3.2.0",
     "drizzle-orm": "^0.45.1",
     "jwt-decode": "^4.0.0",
     "lucide-react": "^0.575.0",

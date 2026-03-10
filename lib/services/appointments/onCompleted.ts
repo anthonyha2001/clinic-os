@@ -68,7 +68,7 @@ export async function onAppointmentCompleted(
     }
   }
 
-  const [row] = await pgClient`
+  const rows = await pgClient`
     SELECT
       a.id AS appointment_id,
       a.organization_id,
@@ -78,6 +78,7 @@ export async function onAppointmentCompleted(
       al.service_id,
       al.plan_item_id,
       al.unit_price AS line_unit_price,
+      al.quantity,
       s.price AS service_price,
       s.name_en,
       s.name_fr,
@@ -87,59 +88,80 @@ export async function onAppointmentCompleted(
     JOIN services s ON s.id = al.service_id
     WHERE a.id = ${appointmentId}
     ORDER BY al.sequence_order ASC
-    LIMIT 1
   `;
 
-  if (!row) {
-    err404("Appointment line not found");
+  if (!rows || rows.length === 0) {
+    err404("Appointment lines not found");
   }
 
-  let planUpdated = false;
-  const planItemId = row.plan_item_id as string | null;
+  const firstRow = rows[0] as Record<string, unknown>;
 
-  if (planItemId) {
-    await onPlanSessionCompleted(planItemId, appointmentId);
+  // Only call onPlanSessionCompleted once, for the first plan-linked line (if any)
+  let planUpdated = false;
+  const planLinkedLine = rows.find((r) => (r as Record<string, unknown>).plan_item_id != null);
+  if (planLinkedLine) {
+    await onPlanSessionCompleted(
+      planLinkedLine.plan_item_id as string,
+      appointmentId
+    );
     planUpdated = true;
   }
 
-  let unitPrice = Number(row.service_price ?? row.line_unit_price ?? 0);
-  if (planItemId) {
-    // T-03/B-02 schemas may add this table later; fallback to line/service price.
+  // Batch fetch plan item prices for plan-linked lines
+  const planItemIds = Array.from(
+    new Set(
+      (rows as Record<string, unknown>[])
+        .filter((r) => r.plan_item_id != null)
+        .map((r) => r.plan_item_id as string)
+    )
+  );
+  const planPrices: Record<string, number> = {};
+  if (planItemIds.length > 0) {
     try {
-      const [planItem] = await pgClient`
-        SELECT unit_price
-        FROM plan_items
-        WHERE id = ${planItemId}
-        LIMIT 1
+      const planRows = await pgClient`
+        SELECT id, unit_price FROM plan_items
+        WHERE id = ANY(${planItemIds})
       `;
-      if (planItem?.unit_price != null) {
-        unitPrice = Number(planItem.unit_price);
+      for (const pr of planRows as unknown as { id: string; unit_price: unknown }[]) {
+        if (pr.unit_price != null) {
+          planPrices[pr.id] = Number(pr.unit_price);
+        }
       }
-    } catch (error: unknown) {
-      const err = error as { code?: string };
-      if (err.code !== "42P01") {
-        throw error;
-      }
+    } catch {
+      // plan_items table may not exist in older schemas; fallback to line price
     }
   }
 
-  const line: AppointmentInvoiceLinePayload = {
-    serviceId: row.service_id,
-    planItemId,
-    quantity: 1,
-    unitPrice,
-    descriptionEn: planItemId ? `${row.name_en} (Plan session)` : row.name_en,
-    descriptionFr: planItemId ? `${row.name_fr} (Séance plan)` : row.name_fr,
-    descriptionAr: planItemId ? `${row.name_ar} (جلسة خطة)` : row.name_ar,
-  };
+  const lines: AppointmentInvoiceLinePayload[] = rows.map((row) => {
+    const r = row as Record<string, unknown>;
+    const planItemId = r.plan_item_id as string | null;
+    const basePrice = Number(r.service_price ?? r.line_unit_price ?? 0);
+    const unitPrice =
+      planItemId && planPrices[planItemId] != null ? planPrices[planItemId] : basePrice;
+    return {
+      serviceId: r.service_id as string,
+      planItemId,
+      quantity: Number(r.quantity ?? 1),
+      unitPrice,
+      descriptionEn: planItemId
+        ? `${r.name_en ?? ""} (Plan session)`
+        : String(r.name_en ?? ""),
+      descriptionFr: planItemId
+        ? `${r.name_fr ?? ""} (Séance plan)`
+        : String(r.name_fr ?? ""),
+      descriptionAr: planItemId
+        ? `${r.name_ar ?? ""} (جلسة خطة)`
+        : String(r.name_ar ?? ""),
+    };
+  });
 
   const invoicePayload: AppointmentInvoicePayload = {
-    appointmentId: row.appointment_id,
-    patientId: row.patient_id,
-    providerId: row.provider_id,
-    createdBy: row.created_by,
-    orgId: row.organization_id,
-    lines: [line],
+    appointmentId: firstRow.appointment_id as string,
+    patientId: firstRow.patient_id as string,
+    providerId: firstRow.provider_id as string,
+    createdBy: firstRow.created_by as string,
+    orgId: firstRow.organization_id as string,
+    lines,
   };
 
   await createInvoice({
@@ -156,6 +178,7 @@ export async function onAppointmentCompleted(
       quantity: l.quantity,
       unitPrice: l.unitPrice,
     })),
+    autoIssue: true, // appointment-completion invoices are immediately issued
   });
 
   return { invoicePayload, planUpdated };

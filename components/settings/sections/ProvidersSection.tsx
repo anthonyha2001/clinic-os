@@ -12,6 +12,7 @@ type Provider = {
   specialtyFr?: string;
   specialtyAr?: string;
   bioEn?: string;
+  bio_en?: string;
   bioFr?: string;
   bioAr?: string;
   colorHex?: string;
@@ -49,7 +50,8 @@ export function ProvidersSection() {
       specialty_en: p.specialtyEn ?? p.specialty_en ?? "",
       bio_en: p.bioEn ?? p.bio_en ?? "",
       color_hex: p.colorHex ?? p.color_hex ?? "#3B82F6",
-      is_accepting_appointments: p.isAcceptingAppointments ?? p.is_accepting_appointments ?? true,
+      is_accepting_appointments:
+        p.isAcceptingAppointments ?? p.is_accepting_appointments ?? true,
     });
     setSlideOpen(true);
   };
@@ -70,7 +72,9 @@ export function ProvidersSection() {
       body: JSON.stringify({
         specialty_en: form.specialty_en.trim() || undefined,
         bio_en: form.bio_en.trim() || undefined,
-        color_hex: /^#[0-9A-Fa-f]{6}$/.test(form.color_hex) ? form.color_hex : undefined,
+        color_hex: /^#[0-9A-Fa-f]{6}$/.test(form.color_hex)
+          ? form.color_hex
+          : undefined,
         is_accepting_appointments: form.is_accepting_appointments,
       }),
     });
@@ -135,21 +139,35 @@ export function ProvidersSection() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/50">
-                <th className="px-5 py-3 text-start font-medium text-muted-foreground">Name</th>
-                <th className="px-5 py-3 text-start font-medium text-muted-foreground">Specialty</th>
-                <th className="px-5 py-3 text-center font-medium text-muted-foreground">Availability</th>
+                <th className="px-5 py-3 text-start font-medium text-muted-foreground">
+                  Name
+                </th>
+                <th className="px-5 py-3 text-start font-medium text-muted-foreground">
+                  Specialty
+                </th>
+                <th className="px-5 py-3 text-center font-medium text-muted-foreground">
+                  Availability
+                </th>
                 <th className="px-5 py-3 w-16" />
               </tr>
             </thead>
             <tbody>
               {providers.map((p) => {
-                const name = p.name ?? "—";
-                const specialty = p.specialtyEn ?? p.specialty_en ?? "—";
-                const accepting = p.isAcceptingAppointments ?? p.is_accepting_appointments ?? true;
+                const name = p.name ?? "\u2014";
+                const specialty = p.specialtyEn ?? p.specialty_en ?? "\u2014";
+                const accepting =
+                  p.isAcceptingAppointments ??
+                  p.is_accepting_appointments ??
+                  true;
                 return (
-                  <tr key={p.id} className="border-b hover:bg-muted/30 transition-colors">
+                  <tr
+                    key={p.id}
+                    className="border-b hover:bg-muted/30 transition-colors"
+                  >
                     <td className="px-5 py-3 font-medium">{name}</td>
-                    <td className="px-5 py-3 text-muted-foreground">{specialty}</td>
+                    <td className="px-5 py-3 text-muted-foreground">
+                      {specialty}
+                    </td>
                     <td className="px-5 py-3 text-center">
                       <button
                         onClick={() => toggleAccepting(p.id, accepting)}
@@ -194,16 +212,22 @@ export function ProvidersSection() {
               type="text"
               placeholder="e.g. Dentist"
               value={form.specialty_en}
-              onChange={(e) => setForm((f) => ({ ...f, specialty_en: e.target.value }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, specialty_en: e.target.value }))
+              }
               className="w-full rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Bio</label>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">
+              Bio
+            </label>
             <textarea
               placeholder="Short bio..."
               value={form.bio_en}
-              onChange={(e) => setForm((f) => ({ ...f, bio_en: e.target.value }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, bio_en: e.target.value }))
+              }
               className="w-full rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[80px]"
               rows={3}
             />
@@ -216,13 +240,17 @@ export function ProvidersSection() {
               <input
                 type="color"
                 value={form.color_hex}
-                onChange={(e) => setForm((f) => ({ ...f, color_hex: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, color_hex: e.target.value }))
+                }
                 className="h-10 w-14 cursor-pointer rounded border"
               />
               <input
                 type="text"
                 value={form.color_hex}
-                onChange={(e) => setForm((f) => ({ ...f, color_hex: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, color_hex: e.target.value }))
+                }
                 className="flex-1 rounded-lg border px-3 py-2 text-sm bg-background font-mono focus:outline-none focus:ring-2 focus:ring-primary/20"
                 placeholder="#3B82F6"
               />
@@ -234,7 +262,10 @@ export function ProvidersSection() {
               id="is_accepting"
               checked={form.is_accepting_appointments}
               onChange={(e) =>
-                setForm((f) => ({ ...f, is_accepting_appointments: e.target.checked }))
+                setForm((f) => ({
+                  ...f,
+                  is_accepting_appointments: e.target.checked,
+                }))
               }
               className="rounded border-gray-300"
             />
@@ -255,7 +286,11 @@ export function ProvidersSection() {
               disabled={submitting}
               className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5"
             >
-              {submitting ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+              {submitting ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Check className="size-3.5" />
+              )}
               Save
             </button>
           </div>

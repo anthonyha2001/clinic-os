@@ -18,6 +18,7 @@ export interface CreateInvoiceInput {
   createdBy: string;
   lines: CreateInvoiceLineInput[];
   notes?: string | null;
+  autoIssue?: boolean; // if true, creates as 'issued' instead of 'draft'
 }
 
 function err404(message: string): never {
@@ -39,11 +40,14 @@ function err422(message: string): never {
 }
 
 export async function createInvoice(input: CreateInvoiceInput) {
-  const { orgId, patientId, appointmentId, createdBy, lines, notes } = input;
+  const { orgId, patientId, appointmentId, createdBy, lines, notes, autoIssue = false } = input;
 
   if (!lines || lines.length === 0) {
     err422("At least one invoice line is required");
   }
+
+  const invoiceStatus = autoIssue ? "issued" : "draft";
+  const issuedAt = autoIssue ? new Date().toISOString() : null;
 
   try {
     return await pgClient.begin(async (tx) => {
@@ -51,34 +55,34 @@ export async function createInvoice(input: CreateInvoiceInput) {
       const sql = tx as any;
 
       const [patient] = await sql`
-      SELECT id
-      FROM patients
-      WHERE id = ${patientId}
-        AND organization_id = ${orgId}
-      LIMIT 1
-    `;
+        SELECT id
+        FROM patients
+        WHERE id = ${patientId}
+          AND organization_id = ${orgId}
+        LIMIT 1
+      `;
       if (!patient) {
         err404("Patient not found");
       }
 
       if (appointmentId) {
         const [existing] = await sql`
-        SELECT id
-        FROM invoices
-        WHERE appointment_id = ${appointmentId}
-        LIMIT 1
-      `;
+          SELECT id
+          FROM invoices
+          WHERE appointment_id = ${appointmentId}
+          LIMIT 1
+        `;
         if (existing) {
           err409("Invoice already exists for this appointment");
         }
 
         const [appointment] = await sql`
-        SELECT id, status, patient_id
-        FROM appointments
-        WHERE id = ${appointmentId}
-          AND organization_id = ${orgId}
-        LIMIT 1
-      `;
+          SELECT id, status, patient_id
+          FROM appointments
+          WHERE id = ${appointmentId}
+            AND organization_id = ${orgId}
+          LIMIT 1
+        `;
         if (!appointment) {
           err404("Appointment not found");
         }
@@ -91,7 +95,7 @@ export async function createInvoice(input: CreateInvoiceInput) {
       }
 
       const normalizedLines: Array<
-      CreateInvoiceLineInput & { lineTotal: number }
+        CreateInvoiceLineInput & { lineTotal: number }
       > = [];
       for (const line of lines) {
         if (line.quantity < 1) {
@@ -103,12 +107,12 @@ export async function createInvoice(input: CreateInvoiceInput) {
 
         if (line.serviceId) {
           const [service] = await sql`
-          SELECT id
-          FROM services
-          WHERE id = ${line.serviceId}
-            AND organization_id = ${orgId}
-          LIMIT 1
-        `;
+            SELECT id
+            FROM services
+            WHERE id = ${line.serviceId}
+              AND organization_id = ${orgId}
+            LIMIT 1
+          `;
           if (!service) {
             err404("Service not found");
           }
@@ -116,13 +120,13 @@ export async function createInvoice(input: CreateInvoiceInput) {
 
         if (line.planItemId) {
           const [planItem] = await sql`
-          SELECT pi.id
-          FROM plan_items pi
-          JOIN plans p ON p.id = pi.plan_id
-          WHERE pi.id = ${line.planItemId}
-            AND p.organization_id = ${orgId}
-          LIMIT 1
-        `;
+            SELECT pi.id
+            FROM plan_items pi
+            JOIN plans p ON p.id = pi.plan_id
+            WHERE pi.id = ${line.planItemId}
+              AND p.organization_id = ${orgId}
+            LIMIT 1
+          `;
           if (!planItem) {
             err404("Plan item not found");
           }
@@ -139,60 +143,62 @@ export async function createInvoice(input: CreateInvoiceInput) {
       const invoiceNumber = await generateInvoiceNumber(orgId, sql);
 
       const [invoice] = await sql`
-      INSERT INTO invoices (
-        organization_id,
-        patient_id,
-        appointment_id,
-        invoice_number,
-        status,
-        subtotal,
-        discount_amount,
-        total,
-        notes,
-        created_by
-      )
-      VALUES (
-        ${orgId},
-        ${patientId},
-        ${appointmentId ?? null},
-        ${invoiceNumber},
-        'draft',
-        ${subtotal},
-        0,
-        ${total},
-        ${notes ?? null},
-        ${createdBy}
-      )
-      RETURNING *
-    `;
+        INSERT INTO invoices (
+          organization_id,
+          patient_id,
+          appointment_id,
+          invoice_number,
+          status,
+          subtotal,
+          discount_amount,
+          total,
+          notes,
+          created_by,
+          issued_at
+        )
+        VALUES (
+          ${orgId},
+          ${patientId},
+          ${appointmentId ?? null},
+          ${invoiceNumber},
+          ${invoiceStatus},
+          ${subtotal},
+          0,
+          ${total},
+          ${notes ?? null},
+          ${createdBy},
+          ${issuedAt}
+        )
+        RETURNING *
+      `;
 
       const insertedLines: unknown[] = [];
       for (const line of normalizedLines) {
         const [inserted] = await sql`
-        INSERT INTO invoice_lines (
-          invoice_id,
-          service_id,
-          plan_item_id,
-          description_en,
-          description_fr,
-          description_ar,
-          quantity,
-          unit_price,
-          line_total
-        )
-        VALUES (
-          ${invoice.id},
-          ${line.serviceId ?? null},
-          ${line.planItemId ?? null},
-          ${line.descriptionEn},
-          ${line.descriptionFr},
-          ${line.descriptionAr},
-          ${line.quantity},
-          ${line.unitPrice},
-          ${line.lineTotal}
-        )
-        RETURNING *
-      `;
+          INSERT INTO invoice_lines (
+            invoice_id,
+            service_id,
+            plan_item_id,
+            description_en,
+            description_fr,
+            description_ar,
+            quantity,
+            unit_price,
+            line_total
+          )
+          VALUES (
+            ${invoice.id},
+            ${line.serviceId ?? null},
+            ${line.planItemId ?? null},
+            ${line.descriptionEn},
+            ${line.descriptionFr},
+            ${line.descriptionAr},
+            ${line.quantity},
+            ${line.unitPrice},
+            ${line.lineTotal}
+          )
+          RETURNING *
+        `;
         insertedLines.push(inserted);
       }
 

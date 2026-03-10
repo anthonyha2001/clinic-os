@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { pgClient } from "@/db/index";
 import { rateLimit } from "@/lib/rateLimit";
+import { checkDepositRequired } from "@/lib/services/noshow/checkDeposit";
+import { isClinicOpen } from "@/lib/services/schedule/isClinicOpen";
 
 const submitBookingSchema = z.object({
   patient_name: z.string().min(1).max(100).trim(),
@@ -70,7 +72,7 @@ export async function POST(
     }
 
     const [org] = await pgClient`
-      SELECT id, timezone FROM organizations
+      SELECT id, timezone, working_hours, off_days FROM organizations
       WHERE slug = ${params.slug}
         AND booking_enabled = true
       LIMIT 1
@@ -89,6 +91,19 @@ export async function POST(
     const endTime = new Date(
       startTime.getTime() + service.default_duration_minutes * 60000
     );
+
+    const clinicCheck = isClinicOpen(
+      org.working_hours,
+      org.off_days,
+      startTime,
+      org.timezone ?? "Asia/Beirut"
+    );
+    if (!clinicCheck.open) {
+      return NextResponse.json(
+        { error: `Booking unavailable: ${clinicCheck.reason}` },
+        { status: 422 }
+      );
+    }
 
     // Check no conflict
     const [conflict] = await pgClient`
@@ -129,6 +144,18 @@ export async function POST(
         RETURNING id
       `;
       patientId = created.id;
+    }
+
+    const depositRequired = await checkDepositRequired(patientId, org.id);
+    if (depositRequired) {
+      return NextResponse.json(
+        {
+          error:
+            "A deposit is required to book. Please call the clinic directly.",
+          requiresDeposit: true,
+        },
+        { status: 402 }
+      );
     }
 
     // Get admin user as created_by
