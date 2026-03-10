@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { withAuth } from "@/lib/auth";
 import { pgClient } from "@/db/index";
 import { randomUUID } from "crypto";
+
+const createUserSchema = z.object({
+  email: z.string().email().max(255).transform((v) => v.trim().toLowerCase()),
+  full_name: z.string().min(1).max(255).transform((v) => v.trim()),
+  role: z
+    .enum(["admin", "manager", "receptionist", "provider", "accountant"])
+    .default("receptionist"),
+});
 
 export const GET = withAuth(
   { roles: ["admin", "manager"] },
@@ -42,24 +51,14 @@ export const POST = withAuth(
   async (request, { user }) => {
     try {
       const body = await request.json();
-      const email = String(body?.email ?? "").trim().toLowerCase();
-      const fullName = String(body?.full_name ?? "").trim();
-      const roleName = String(body?.role ?? "receptionist").trim();
-
-      if (!email || !fullName) {
+      const parsed = createUserSchema.safeParse(body);
+      if (!parsed.success) {
         return NextResponse.json(
-          { error: "email and full_name are required" },
+          { error: "Validation failed", details: parsed.error.issues },
           { status: 422 }
         );
       }
-
-      const validRoles = ["admin", "manager", "receptionist", "provider", "accountant"];
-      if (!validRoles.includes(roleName)) {
-        return NextResponse.json(
-          { error: "Invalid role" },
-          { status: 422 }
-        );
-      }
+      const { email, full_name: fullName, role: roleName } = parsed.data;
 
       const [existing] = await pgClient`
         SELECT id FROM users

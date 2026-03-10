@@ -26,7 +26,7 @@ export async function getPatient(
            email, phone, phone_secondary, address, preferred_locale, is_active,
            created_at, updated_at
     FROM patients
-    WHERE id = ${patientId} AND organization_id = ${orgId}
+    WHERE id = ${patientId} AND organization_id = ${orgId} AND deleted_at IS NULL
   `;
   if (!row) return null;
 

@@ -31,7 +31,7 @@ export async function updatePatient(
   input: UpdatePatient
 ): Promise<UpdatedPatient> {
   const existing = await getPatient(patientId, orgId);
-  if (!existing) {
+  if (!existing || (existing as unknown as Record<string, unknown>).deletedAt) {
     const e = new Error("Patient not found") as Error & { statusCode: number };
     e.statusCode = 404;
     throw e;

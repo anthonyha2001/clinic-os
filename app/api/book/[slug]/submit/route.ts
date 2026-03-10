@@ -1,19 +1,72 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { pgClient } from "@/db/index";
+import { rateLimit } from "@/lib/rateLimit";
+
+const submitBookingSchema = z.object({
+  patient_name: z.string().min(1).max(100).trim(),
+  patient_phone: z.string().min(5).max(30).trim(),
+  patient_email: z
+    .union([z.string().email().max(255), z.literal("")])
+    .optional()
+    .transform((v) => (v === "" || v === undefined ? null : v)),
+  provider_id: z.string().uuid(),
+  service_id: z.string().uuid(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format"),
+  time: z.string().regex(/^\d{2}:\d{2}$/, "Invalid time format"),
+  notes: z.string().max(500).optional().nullable(),
+});
 
 export async function POST(
   request: NextRequest,
   { params }: { params: { slug: string } }
 ) {
   try {
-    const body = await request.json();
-    const {
-      patient_name, patient_phone, patient_email,
-      provider_id, service_id, date, time, notes,
-    } = body;
+    const ip =
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+    const allowed = rateLimit(ip, 5, 60_000); // 5 submissions per minute per IP
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please wait before trying again." },
+        { status: 429 }
+      );
+    }
 
-    if (!patient_name || !patient_phone || !provider_id || !service_id || !date || !time) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 422 });
+    const body = await request.json();
+    const parsed = submitBookingSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid booking data", details: parsed.error.issues },
+        { status: 422 }
+      );
+    }
+    const {
+      patient_name,
+      patient_phone,
+      patient_email,
+      provider_id,
+      service_id,
+      date,
+      time,
+      notes,
+    } = parsed.data;
+
+    const bookingDate = new Date(`${date}T${time}:00`);
+    const now = new Date();
+    const ninetyDaysFromNow = new Date(
+      now.getTime() + 90 * 24 * 60 * 60 * 1000
+    );
+    if (bookingDate < now) {
+      return NextResponse.json(
+        { error: "Cannot book in the past" },
+        { status: 422 }
+      );
+    }
+    if (bookingDate > ninetyDaysFromNow) {
+      return NextResponse.json(
+        { error: "Cannot book more than 90 days ahead" },
+        { status: 422 }
+      );
     }
 
     const [org] = await pgClient`
@@ -33,7 +86,9 @@ export async function POST(
     if (!service) return NextResponse.json({ error: "Service not found" }, { status: 404 });
 
     const startTime = new Date(`${date}T${time}:00`);
-    const endTime = new Date(startTime.getTime() + service.default_duration_minutes * 60000);
+    const endTime = new Date(
+      startTime.getTime() + service.default_duration_minutes * 60000
+    );
 
     // Check no conflict
     const [conflict] = await pgClient`
@@ -120,17 +175,33 @@ export async function POST(
       WHERE id = ${service_id}
     `;
 
+    // Log booking request for notification center
+    await pgClient`
+      INSERT INTO booking_requests (
+        organization_id, appointment_id, patient_id,
+        service_id, provider_id, requested_date, requested_time,
+        patient_name, patient_phone, patient_email, notes, status
+      ) VALUES (
+        ${org.id}, ${appointment.id}, ${patientId},
+        ${service_id}, ${provider_id}, ${date}::date, ${time},
+        ${patient_name}, ${patient_phone}, ${patient_email ?? null},
+        ${notes ?? null}, 'confirmed'
+      )
+    `;
+
     return NextResponse.json({
       ok: true,
       appointment_id: appointment.id,
       start_time: startTime.toISOString(),
       end_time: endTime.toISOString(),
     }, { status: 201 });
-
   } catch (e) {
     if (process.env.NODE_ENV !== "production") {
       console.error("Booking submit error:", e instanceof Error ? e.message : "Unknown");
     }
-    return NextResponse.json({ error: "Booking failed. Please try again." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Booking failed. Please try again." },
+      { status: 500 }
+    );
   }
 }

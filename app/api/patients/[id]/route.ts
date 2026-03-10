@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
+import { pgClient } from "@/db/index";
 import { updatePatientSchema } from "@/lib/validations/patient";
 import { getPatient } from "@/lib/services/patients/get";
 import { getRiskScore } from "@/lib/services/patients/getRiskScore";
@@ -78,3 +79,43 @@ export const PATCH = withAuth(async (request, { user, params }) => {
     );
   }
 });
+
+export const DELETE = withAuth(
+  { roles: ["admin", "manager"] },
+  async (_request, { user, params }) => {
+    try {
+      const id = params?.id as string | undefined;
+      if (!id) {
+        return NextResponse.json({ error: "Patient ID required" }, { status: 400 });
+      }
+
+      const [existing] = await pgClient`
+        SELECT id FROM patients
+        WHERE id = ${id}
+          AND organization_id = ${user.organizationId}
+          AND deleted_at IS NULL
+        LIMIT 1
+      `;
+      if (!existing) {
+        return NextResponse.json({ error: "Patient not found" }, { status: 404 });
+      }
+
+      await pgClient`
+        UPDATE patients SET
+          deleted_at = now(),
+          is_active = false,
+          updated_at = now()
+        WHERE id = ${id}
+          AND organization_id = ${user.organizationId}
+      `;
+
+      return NextResponse.json({ ok: true });
+    } catch (e) {
+      console.error("DELETE /api/patients/[id] error:", e);
+      return NextResponse.json(
+        { error: "Internal server error" },
+        { status: 500 }
+      );
+    }
+  }
+);

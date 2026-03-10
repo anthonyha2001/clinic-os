@@ -53,6 +53,8 @@ export async function listAppointments(
       LIMIT 1
     ) svc ON true
     WHERE a.organization_id = ${input.orgId}
+      AND a.deleted_at IS NULL
+      AND p.deleted_at IS NULL
       AND a.start_time >= ${start.toISOString()}
       AND a.start_time < ${end.toISOString()}
     ORDER BY a.start_time ASC

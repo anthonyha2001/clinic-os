@@ -52,6 +52,7 @@ export async function listPatients(
         SELECT COUNT(*)::int AS total
         FROM patients p
         WHERE p.organization_id = ${orgId}
+          AND p.deleted_at IS NULL
           AND (${!activeFilter} OR p.is_active = true)
           AND (
             p.first_name ILIKE ${pattern}
@@ -64,6 +65,7 @@ export async function listPatients(
         SELECT COUNT(*)::int AS total
         FROM patients p
         WHERE p.organization_id = ${orgId}
+          AND p.deleted_at IS NULL
           AND (${!activeFilter} OR p.is_active = true)
       `;
 
@@ -98,6 +100,7 @@ export async function listPatients(
         FROM patients p
         LEFT JOIN risk_scores rs ON rs.patient_id = p.id AND rs.organization_id = p.organization_id
         WHERE p.organization_id = ${orgId}
+          AND p.deleted_at IS NULL
           AND (${!activeFilter} OR p.is_active = true)
           AND (
             p.first_name ILIKE ${pattern}
@@ -136,6 +139,7 @@ export async function listPatients(
         FROM patients p
         LEFT JOIN risk_scores rs ON rs.patient_id = p.id AND rs.organization_id = p.organization_id
         WHERE p.organization_id = ${orgId}
+          AND p.deleted_at IS NULL
           AND (${!activeFilter} OR p.is_active = true)
         ORDER BY p.last_name ASC, p.first_name ASC
         LIMIT ${limit}

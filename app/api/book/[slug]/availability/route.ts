@@ -1,11 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pgClient } from "@/db/index";
+import { rateLimit } from "@/lib/rateLimit";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { slug: string } }
 ) {
   try {
+    const ip =
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+    const allowed = rateLimit(ip, 10, 60_000); // 10 requests per minute per IP
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please wait before trying again." },
+        { status: 429 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const date = searchParams.get("date");
     const providerId = searchParams.get("provider_id");
