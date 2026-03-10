@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages, setRequestLocale } from "next-intl/server";
 import { defaultLocale, locales, type Locale } from "@/i18n/config";
+import { SessionRefresher } from "@/components/providers/SessionRefresher";
 import "../globals.css";
 
 const geistSans = localFont({
@@ -39,6 +40,7 @@ export default async function RootLayout({
 
   return (
     <div lang={locale} dir={locale === "ar" ? "rtl" : "ltr"} className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <SessionRefresher />
       <NextIntlClientProvider messages={messages}>
         {children}
       </NextIntlClientProvider>

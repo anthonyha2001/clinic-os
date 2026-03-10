@@ -23,6 +23,16 @@ export async function POST(request: NextRequest) {
       RETURNING *
     `;
 
+    // Seed default roles for the new organization
+    const defaultRoles = ["admin", "manager", "provider", "receptionist", "accountant", "staff"];
+    for (const roleName of defaultRoles) {
+      await pgClient`
+        INSERT INTO roles (id, organization_id, name)
+        VALUES (gen_random_uuid(), ${org.id}, ${roleName})
+        ON CONFLICT (organization_id, name) DO NOTHING
+      `;
+    }
+
     return NextResponse.json(org, { status: 201 });
   } catch (e: unknown) {
     const err = e as Error;

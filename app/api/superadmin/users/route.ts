@@ -24,32 +24,42 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "email, full_name, organization_id required" }, { status: 422 });
     }
 
-    // Create Supabase auth user
+    // 1. Create Supabase auth user
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password: password ?? Math.random().toString(36).slice(-10) + "A1!",
       email_confirm: true,
       user_metadata: { full_name, role },
     });
-
     if (authError || !authData.user) {
       return NextResponse.json({ error: authError?.message ?? "Failed to create auth user" }, { status: 500 });
     }
 
-    // Insert into public.users
+    // 2. Set app_metadata IMMEDIATELY so JWT works on first login
+    await supabaseAdmin.auth.admin.updateUserById(authData.user.id, {
+      app_metadata: {
+        organization_id: organization_id,
+        roles: [role],
+        permissions: [],
+      },
+    });
+
+    // 3. Insert into public.users
     const [user] = await pgClient`
       INSERT INTO users (id, organization_id, email, full_name, phone, preferred_locale)
       VALUES (${authData.user.id}, ${organization_id}, ${email}, ${full_name}, ${phone ?? null}, 'en')
       RETURNING *
     `;
 
-    // Assign role (required for login - getCurrentUser looks up roles)
+    // 4. Assign role
     const allRoles = await pgClient`
       SELECT id, name FROM roles WHERE organization_id = ${organization_id}
     `;
     const allRolesArr = allRoles as unknown as { id: string; name: string }[];
-    const requestedRole = allRolesArr.find((r) => r.name === role);
-    const adminRole = allRolesArr.find((r) => r.name === "admin");
+    const requestedRole = allRolesArr.find(
+      (r) => r.name.toLowerCase() === role.toLowerCase()
+    );
+    const adminRole = allRolesArr.find((r) => r.name.toLowerCase() === "admin");
     const anyRole = allRolesArr[0];
     const assignRoleId = requestedRole?.id ?? adminRole?.id ?? anyRole?.id;
 
@@ -61,6 +71,7 @@ export async function POST(request: NextRequest) {
       `;
     }
 
+    // 5. Create provider profile if needed
     if (role === "provider" || role === "doctor") {
       await pgClient`
         INSERT INTO provider_profiles (
@@ -70,21 +81,6 @@ export async function POST(request: NextRequest) {
         ON CONFLICT (user_id) DO NOTHING
       `;
     }
-
-    // Embed org_id and roles in JWT app_metadata for fast auth
-    await supabaseAdmin.auth.admin.updateUserById(authData.user.id, {
-      app_metadata: {
-        organization_id: organization_id,
-        roles: [role],
-        permissions: [],
-      },
-    });
-
-    // Send invite email
-    await supabaseAdmin.auth.admin.generateLink({
-      type: "magiclink",
-      email,
-    });
 
     return NextResponse.json({ user, auth_id: authData.user.id }, { status: 201 });
   } catch (e: unknown) {
@@ -101,14 +97,22 @@ export async function GET(request: NextRequest) {
 
     const users = orgId
       ? await pgClient`
-          SELECT u.*, o.name AS org_name
+          SELECT u.*, o.name AS org_name,
+            (SELECT r.name FROM user_roles ur 
+             JOIN roles r ON r.id = ur.role_id 
+             WHERE ur.user_id = u.id 
+             LIMIT 1) AS role_name
           FROM users u
           JOIN organizations o ON o.id = u.organization_id
           WHERE u.organization_id = ${orgId}
           ORDER BY u.created_at DESC
         `
       : await pgClient`
-          SELECT u.*, o.name AS org_name
+          SELECT u.*, o.name AS org_name,
+            (SELECT r.name FROM user_roles ur 
+             JOIN roles r ON r.id = ur.role_id 
+             WHERE ur.user_id = u.id 
+             LIMIT 1) AS role_name
           FROM users u
           JOIN organizations o ON o.id = u.organization_id
           ORDER BY u.created_at DESC

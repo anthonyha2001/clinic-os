@@ -52,6 +52,14 @@ export function SuperAdminDashboard() {
   const [userLoading, setUserLoading] = useState(false);
   const [userError, setUserError] = useState("");
   const [userSuccess, setUserSuccess] = useState("");
+  const [availableRoles, setAvailableRoles] = useState<{ id: string; name: string }[]>([]);
+
+  const [editingUser, setEditingUser] = useState<Record<string, unknown> | null>(null);
+  const [editUserForm, setEditUserForm] = useState({ full_name: "", phone: "", role: "", is_active: true });
+  const [editUserLoading, setEditUserLoading] = useState(false);
+  const [editUserError, setEditUserError] = useState("");
+  const [deleteConfirmUser, setDeleteConfirmUser] = useState<Record<string, unknown> | null>(null);
+  const [deleteUserLoading, setDeleteUserLoading] = useState(false);
 
   // Suspended orgs
   const [suspendedOrgs, setSuspendedOrgs] = useState<Set<string>>(new Set());
@@ -102,6 +110,17 @@ export function SuperAdminDashboard() {
     }
   }
 
+  async function fetchOrgRoles(orgId: string) {
+    const res = await fetch(`/api/superadmin/roles?organization_id=${orgId}`);
+    if (res.ok) {
+      const data = await res.json();
+      setAvailableRoles(data);
+      if (data.length > 0) {
+        setUserForm((f) => ({ ...f, role: data[0].name }));
+      }
+    }
+  }
+
   async function handleCreateOrg() {
     setOrgLoading(true);
     setOrgError("");
@@ -130,10 +149,53 @@ export function SuperAdminDashboard() {
     const data = await res.json();
     if (!res.ok) { setUserError(data.error); setUserLoading(false); return; }
     setUserSuccess(`User ${userForm.email} created successfully!`);
-    setUserForm({ email: "", full_name: "", phone: "", password: "", role: "admin" });
+    setUserForm({
+      email: "",
+      full_name: "",
+      phone: "",
+      password: "",
+      role: availableRoles.length > 0 ? availableRoles[0].name : "admin",
+    });
     setOrgUsers(prev => ({ ...prev, [orgId]: [] })); // force refresh
     fetchOrgUsers(orgId);
     setUserLoading(false);
+  }
+
+  async function handleEditUser(userId: string, orgId: string) {
+    setEditUserLoading(true);
+    setEditUserError("");
+    try {
+      const res = await fetch(`/api/superadmin/users/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editUserForm),
+      });
+      const data = await res.json();
+      if (!res.ok) { setEditUserError(data.error); return; }
+      setEditingUser(null);
+      setOrgUsers(prev => ({ ...prev, [orgId]: [] }));
+      fetchOrgUsers(orgId);
+    } catch {
+      setEditUserError("Network error");
+    } finally {
+      setEditUserLoading(false);
+    }
+  }
+
+  async function handleDeleteUser(userId: string, orgId: string) {
+    setDeleteUserLoading(true);
+    try {
+      const res = await fetch(`/api/superadmin/users/${userId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setDeleteConfirmUser(null);
+        setOrgUsers(prev => ({ ...prev, [orgId]: [] }));
+        fetchOrgUsers(orgId);
+      }
+    } finally {
+      setDeleteUserLoading(false);
+    }
   }
 
   async function handleSuspend(orgId: string) {
@@ -230,6 +292,18 @@ export function SuperAdminDashboard() {
           >
             <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
             Refresh
+          </button>
+          <button
+            onClick={async () => {
+              const res = await fetch("/api/superadmin/fix-metadata", { method: "POST" });
+              const d = await res.json();
+              alert(`Fixed ${d.fixed} users`);
+            }}
+            className="flex items-center gap-2 text-sm text-yellow-400 hover:text-yellow-300 
+              px-4 py-2 rounded-xl hover:bg-yellow-950/30 border border-transparent 
+              hover:border-yellow-900/50 transition-colors"
+          >
+            Fix Auth Metadata
           </button>
           <button
             onClick={handleLogout}
@@ -410,7 +484,14 @@ export function SuperAdminDashboard() {
                         <div className="flex items-center justify-between mb-2">
                           <h3 className="text-sm font-semibold text-slate-300">Users in {org.name}</h3>
                           <button
-                            onClick={() => setShowCreateUser(showCreateUser === org.id ? null : org.id)}
+                            onClick={() => {
+                              if (showCreateUser === org.id) {
+                                setShowCreateUser(null);
+                              } else {
+                                setShowCreateUser(org.id);
+                                fetchOrgRoles(org.id);
+                              }
+                            }}
                             className="flex items-center gap-1.5 text-xs bg-green-700 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg transition-colors"
                           >
                             <UserPlus className="size-3.5" />
@@ -452,12 +533,21 @@ export function SuperAdminDashboard() {
                                   onChange={(e) => setUserForm(f => ({ ...f, role: e.target.value }))}
                                   className="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-500/50"
                                 >
-                                  <option value="admin">Admin</option>
-                                  <option value="manager">Manager</option>
-                                  <option value="provider">Provider / Doctor</option>
-                                  <option value="staff">Staff</option>
-                                  <option value="receptionist">Receptionist</option>
-                                  <option value="accountant">Accountant</option>
+                                  {availableRoles.length > 0 ? (
+                                    availableRoles.map((r) => (
+                                      <option key={r.id} value={r.name}>
+                                        {r.name.charAt(0).toUpperCase() + r.name.slice(1)}
+                                      </option>
+                                    ))
+                                  ) : (
+                                    <>
+                                      <option value="admin">Admin</option>
+                                      <option value="manager">Manager</option>
+                                      <option value="provider">Provider</option>
+                                      <option value="receptionist">Receptionist</option>
+                                      <option value="accountant">Accountant</option>
+                                    </>
+                                  )}
                                 </select>
                               </div>
                             </div>
@@ -473,6 +563,12 @@ export function SuperAdminDashboard() {
                           </div>
                         )}
 
+                        {editUserError && (
+                          <div className="text-xs text-red-400 bg-red-900/20 rounded px-3 py-2 border border-red-900/50">
+                            {editUserError}
+                          </div>
+                        )}
+
                         {/* Users table */}
                         {orgUsers[org.id] ? (
                           <div className="rounded-xl border border-slate-700 overflow-hidden">
@@ -481,29 +577,120 @@ export function SuperAdminDashboard() {
                                 <tr className="border-b border-slate-700 bg-slate-800/50">
                                   <th className="px-4 py-2.5 text-start text-xs font-medium text-slate-400">Name</th>
                                   <th className="px-4 py-2.5 text-start text-xs font-medium text-slate-400">Email</th>
-                                  <th className="px-4 py-2.5 text-start text-xs font-medium text-slate-400">Phone</th>
+                                  <th className="px-4 py-2.5 text-start text-xs font-medium text-slate-400">Role</th>
                                   <th className="px-4 py-2.5 text-center text-xs font-medium text-slate-400">Status</th>
                                   <th className="px-4 py-2.5 text-start text-xs font-medium text-slate-400">Joined</th>
+                                  <th className="px-4 py-2.5 w-20" />
                                 </tr>
                               </thead>
                               <tbody>
-                                {(orgUsers[org.id] as Record<string, unknown>[]).map((u, i) => (
-                                  <tr key={i} className="border-b border-slate-800 hover:bg-slate-800/30 transition-colors">
-                                    <td className="px-4 py-2.5 font-medium">{u.full_name as string}</td>
-                                    <td className="px-4 py-2.5 text-slate-400">{u.email as string}</td>
-                                    <td className="px-4 py-2.5 text-slate-400">{(u.phone as string) ?? "—"}</td>
-                                    <td className="px-4 py-2.5 text-center">
-                                      {u.is_active ? (
-                                        <span className="inline-flex items-center gap-1 text-xs text-green-400"><CheckCircle className="size-3" />Active</span>
-                                      ) : (
-                                        <span className="inline-flex items-center gap-1 text-xs text-red-400"><XCircle className="size-3" />Inactive</span>
-                                      )}
-                                    </td>
-                                    <td className="px-4 py-2.5 text-slate-400 text-xs">
-                                      {new Date(u.created_at as string).toLocaleDateString()}
-                                    </td>
-                                  </tr>
-                                ))}
+                                {(orgUsers[org.id] as Record<string, unknown>[]).map((u, i) => {
+                                  const isEditing = editingUser && (editingUser.id as string) === (u.id as string);
+                                  return (
+                                    <tr key={i} className="border-b border-slate-800 hover:bg-slate-800/30 transition-colors">
+                                      <td className="px-4 py-2.5 font-medium">
+                                        {isEditing ? (
+                                          <input
+                                            value={editUserForm.full_name}
+                                            onChange={e => setEditUserForm(f => ({ ...f, full_name: e.target.value }))}
+                                            className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                          />
+                                        ) : (u.full_name as string)}
+                                      </td>
+                                      <td className="px-4 py-2.5 text-slate-400 text-xs">{u.email as string}</td>
+                                      <td className="px-4 py-2.5">
+                                        {isEditing ? (
+                                          <select
+                                            value={editUserForm.role}
+                                            onChange={e => setEditUserForm(f => ({ ...f, role: e.target.value }))}
+                                            className="bg-slate-700 border border-slate-600 rounded px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                          >
+                                            {availableRoles.length > 0 ? availableRoles.map(r => (
+                                              <option key={r.id} value={r.name}>{r.name.charAt(0).toUpperCase() + r.name.slice(1)}</option>
+                                            )) : (
+                                              <>
+                                                <option value="admin">Admin</option>
+                                                <option value="manager">Manager</option>
+                                                <option value="provider">Provider</option>
+                                                <option value="receptionist">Receptionist</option>
+                                                <option value="accountant">Accountant</option>
+                                              </>
+                                            )}
+                                          </select>
+                                        ) : (
+                                          <span className="inline-flex items-center rounded-full bg-slate-700 px-2 py-0.5 text-xs text-slate-300">
+                                            {(u.role_name as string) ?? "—"}
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="px-4 py-2.5 text-center">
+                                        {isEditing ? (
+                                          <select
+                                            value={editUserForm.is_active ? "active" : "inactive"}
+                                            onChange={e => setEditUserForm(f => ({ ...f, is_active: e.target.value === "active" }))}
+                                            className="bg-slate-700 border border-slate-600 rounded px-2 py-1 text-xs text-white focus:outline-none"
+                                          >
+                                            <option value="active">Active</option>
+                                            <option value="inactive">Inactive</option>
+                                          </select>
+                                        ) : u.is_active ? (
+                                          <span className="inline-flex items-center gap-1 text-xs text-green-400"><CheckCircle className="size-3" />Active</span>
+                                        ) : (
+                                          <span className="inline-flex items-center gap-1 text-xs text-red-400"><XCircle className="size-3" />Inactive</span>
+                                        )}
+                                      </td>
+                                      <td className="px-4 py-2.5 text-slate-400 text-xs">
+                                        {new Date(u.created_at as string).toLocaleDateString()}
+                                      </td>
+                                      <td className="px-4 py-2.5">
+                                        {isEditing ? (
+                                          <div className="flex items-center gap-1">
+                                            <button
+                                              onClick={() => handleEditUser(u.id as string, org.id)}
+                                              disabled={editUserLoading}
+                                              className="rounded px-2 py-1 text-xs bg-green-600 hover:bg-green-500 text-white disabled:opacity-50 flex items-center gap-1"
+                                            >
+                                              {editUserLoading ? <Loader2 className="size-3 animate-spin" /> : <CheckCircle className="size-3" />}
+                                              Save
+                                            </button>
+                                            <button
+                                              onClick={() => { setEditingUser(null); setEditUserError(""); }}
+                                              className="rounded px-2 py-1 text-xs border border-slate-600 hover:bg-slate-700 text-slate-300"
+                                            >
+                                              Cancel
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <div className="flex items-center gap-1">
+                                            <button
+                                              onClick={() => {
+                                                setEditingUser(u);
+                                                setEditUserForm({
+                                                  full_name: (u.full_name as string) ?? "",
+                                                  phone: (u.phone as string) ?? "",
+                                                  role: (u.role_name as string) ?? "",
+                                                  is_active: (u.is_active as boolean) ?? true,
+                                                });
+                                                fetchOrgRoles(org.id);
+                                              }}
+                                              className="rounded p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+                                              title="Edit"
+                                            >
+                                              <Settings className="size-3.5" />
+                                            </button>
+                                            <button
+                                              onClick={() => setDeleteConfirmUser({ ...u, orgId: org.id })}
+                                              className="rounded p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-900/20 transition-colors"
+                                              title="Delete"
+                                            >
+                                              <XCircle className="size-3.5" />
+                                            </button>
+                                          </div>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
                               </tbody>
                             </table>
                             {(orgUsers[org.id] as unknown[]).length === 0 && (
@@ -550,6 +737,44 @@ export function SuperAdminDashboard() {
           )}
         </div>
       </div>
+
+      {deleteConfirmUser && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !deleteUserLoading && setDeleteConfirmUser(null)} />
+          <div className="relative z-10 w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl p-6 animate-in fade-in-0 zoom-in-95 duration-200">
+            <div className="flex items-start gap-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-900/40 border border-red-800">
+                <XCircle className="size-5 text-red-400" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-white">Delete User</h3>
+                <p className="mt-1 text-sm text-slate-400">
+                  Are you sure you want to delete{" "}
+                  <strong className="text-white">{deleteConfirmUser.full_name as string}</strong>?
+                  This will remove their access permanently.
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 flex gap-2 justify-end">
+              <button
+                onClick={() => setDeleteConfirmUser(null)}
+                disabled={deleteUserLoading}
+                className="rounded-lg border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800 text-slate-300 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteUser(deleteConfirmUser.id as string, deleteConfirmUser.orgId as string)}
+                disabled={deleteUserLoading}
+                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteUserLoading ? <Loader2 className="size-4 animate-spin" /> : null}
+                Delete User
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
