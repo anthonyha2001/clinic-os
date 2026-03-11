@@ -7,7 +7,7 @@ interface SessionSchedulePopupProps {
     id: string;
     service_id?: string | null;
     description_en?: string | null;
-    service?: { name_en?: string } | null;
+    service?: { name_en?: string; default_duration_minutes?: number } | null;
     quantity_completed: number;
     quantity_total: number;
   };
@@ -38,6 +38,49 @@ function getFirstDayOfMonth(year: number, month: number) {
   return new Date(year, month, 1).getDay();
 }
 
+// Convert "HH:MM" to total minutes from midnight
+function slotToMinutes(slot: string): number {
+  const [h, m] = slot.split(":").map(Number);
+  return h * 60 + m;
+}
+
+// Convert a Date to "HH:MM" in local time
+function dateToSlot(d: Date): string {
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+/**
+ * Compute all blocked slots given:
+ * - busyWindows: list of { start, end } in minutes from midnight for existing appointments
+ * - serviceDurationMinutes: how long the new appointment we want to book takes
+ *
+ * A slot is blocked if:
+ * 1. It starts inside an existing appointment window (already occupied), OR
+ * 2. Booking at that slot with serviceDurationMinutes would overlap into an existing appointment
+ */
+function computeBlockedSlots(
+  busyWindows: { start: number; end: number }[],
+  serviceDurationMinutes: number
+): Set<string> {
+  const blocked = new Set<string>();
+
+  for (const slot of TIME_SLOTS) {
+    const slotStart = slotToMinutes(slot);
+    const slotEnd = slotStart + serviceDurationMinutes;
+
+    for (const busy of busyWindows) {
+      // Overlap check: slot range [slotStart, slotEnd) overlaps busy range [busy.start, busy.end)
+      const overlaps = slotStart < busy.end && slotEnd > busy.start;
+      if (overlaps) {
+        blocked.add(slot);
+        break;
+      }
+    }
+  }
+
+  return blocked;
+}
+
 export function SessionSchedulePopup({ planItem, plan, existingAppointment, onClose, onSuccess }: SessionSchedulePopupProps) {
   const today = new Date();
   const existingStart = existingAppointment ? new Date(existingAppointment.startTime) : null;
@@ -54,12 +97,12 @@ export function SessionSchedulePopup({ planItem, plan, existingAppointment, onCl
           return Math.abs(slotMins - rawMinutes) < Math.abs(bestMins - rawMinutes) ? slot : best;
         }, TIME_SLOTS[0])
       : "";
-  const initialTime = nearestSlot || "";
+
   const [viewYear, setViewYear] = useState(existingStart?.getFullYear() ?? today.getFullYear());
   const [viewMonth, setViewMonth] = useState(existingStart?.getMonth() ?? today.getMonth());
   const [selectedDate, setSelectedDate] = useState<string>(initialDate);
-  const [selectedTime, setSelectedTime] = useState<string>(initialTime);
-  const [busySlots, setBusySlots] = useState<string[]>([]);
+  const [selectedTime, setSelectedTime] = useState<string>(nearestSlot || "");
+  const [busyWindows, setBusyWindows] = useState<{ start: number; end: number }[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,38 +114,51 @@ export function SessionSchedulePopup({ planItem, plan, existingAppointment, onCl
   const sessionLabel = planItem.description_en ?? planItem.service?.name_en ?? "Session";
   const nextSession = Number(planItem.quantity_completed) + 1;
 
-  // Fetch busy slots when date selected
+  // Service duration: use the service's default_duration_minutes, fall back to 30
+  const serviceDurationMinutes = Number(
+    planItem.service?.default_duration_minutes ?? 30
+  );
+
+  // Fetch busy windows when date selected
   useEffect(() => {
     if (!selectedDate || !providerId) return;
     setLoadingSlots(true);
-    setBusySlots([]);
+    setBusyWindows([]);
     const dayStart = `${selectedDate}T00:00:00.000Z`;
     const dayEnd = `${selectedDate}T23:59:59.999Z`;
     fetch(`/api/appointments?start_date=${dayStart}&end_date=${dayEnd}`, { credentials: "include" })
       .then((r) => r.json())
       .then((data) => {
         const appts = Array.isArray(data) ? data : (data.appointments ?? []);
-        const busy = appts
+        const windows = appts
           .filter((a: Record<string, unknown>) =>
             (a.providerId ?? a.provider_id) === providerId &&
-            !["canceled", "no_show"].includes(a.status as string)
+            !["canceled", "no_show"].includes(a.status as string) &&
+            // Skip the appointment being rescheduled so it doesn't block itself
+            a.id !== existingAppointment?.id
           )
           .map((a: Record<string, unknown>) => {
-            const t = new Date((a.startTime ?? a.start_time) as string);
-            const localH = String(t.getHours()).padStart(2, "0");
-            const localM = String(t.getMinutes()).padStart(2, "0");
-            return `${localH}:${localM}`;
+            const startDate = new Date((a.startTime ?? a.start_time) as string);
+            const endDate = new Date((a.endTime ?? a.end_time) as string);
+            // Fall back to 30min if end_time is missing or equal to start
+            const startMins = startDate.getHours() * 60 + startDate.getMinutes();
+            const rawEnd = endDate.getHours() * 60 + endDate.getMinutes();
+            const endMins = rawEnd > startMins ? rawEnd : startMins + 30;
+            return { start: startMins, end: endMins };
           });
-        setBusySlots(busy);
+        setBusyWindows(windows);
         setLoadingSlots(false);
       })
       .catch(() => setLoadingSlots(false));
   }, [selectedDate, providerId]);
 
+  const blockedSlots = computeBlockedSlots(busyWindows, serviceDurationMinutes);
+
   const isReschedule = !!existingAppointment;
 
   async function handleBook() {
     if (!selectedDate || !selectedTime) { setError("Select a date and time slot"); return; }
+    if (blockedSlots.has(selectedTime)) { setError("This slot is unavailable. Please choose another."); return; }
     setLoading(true);
     setError(null);
 
@@ -111,7 +167,7 @@ export function SessionSchedulePopup({ planItem, plan, existingAppointment, onCl
     if (isReschedule) {
       const durationMs = existingAppointment!.endTime
         ? new Date(existingAppointment.endTime).getTime() - new Date(existingAppointment.startTime).getTime()
-        : 30 * 60 * 1000;
+        : serviceDurationMinutes * 60 * 1000;
       const endTime = new Date(startTime.getTime() + durationMs);
 
       const res = await fetch(`/api/appointments/${existingAppointment!.id}`, {
@@ -151,6 +207,8 @@ export function SessionSchedulePopup({ planItem, plan, existingAppointment, onCl
       return;
     }
 
+    const endTime = new Date(startTime.getTime() + serviceDurationMinutes * 60 * 1000);
+
     const res = await fetch("/api/appointments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -159,7 +217,8 @@ export function SessionSchedulePopup({ planItem, plan, existingAppointment, onCl
         patient_id: patientId,
         provider_id: providerId,
         start_time: startTime.toISOString(),
-        notes: `${sessionLabel} — Session ${nextSession}/${planItem.quantity_total}`,
+        end_time: endTime.toISOString(),
+        notes: `${sessionLabel} – Session ${nextSession}/${planItem.quantity_total}`,
         lines: [{ service_id: serviceId, quantity: 1, plan_item_id: planItem.id }],
       }),
     });
@@ -207,8 +266,8 @@ export function SessionSchedulePopup({ planItem, plan, existingAppointment, onCl
 
   function isPast(day: number) {
     const d = new Date(viewYear, viewMonth, day);
-    d.setHours(0,0,0,0);
-    const t = new Date(); t.setHours(0,0,0,0);
+    d.setHours(0, 0, 0, 0);
+    const t = new Date(); t.setHours(0, 0, 0, 0);
     return d < t;
   }
 
@@ -217,6 +276,7 @@ export function SessionSchedulePopup({ planItem, plan, existingAppointment, onCl
       <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose} />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none overflow-y-auto">
         <div className="bg-card rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] my-auto pointer-events-auto overflow-hidden flex flex-col shrink-0">
+
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
             <div>
@@ -224,6 +284,9 @@ export function SessionSchedulePopup({ planItem, plan, existingAppointment, onCl
               <p className="text-xs text-muted-foreground mt-0.5">
                 {sessionLabel} · Session {nextSession} of {planItem.quantity_total} ·{" "}
                 {plan.patient?.first_name} {plan.patient?.last_name}
+                {serviceDurationMinutes > 0 && (
+                  <span className="ml-1 text-muted-foreground/70">· {serviceDurationMinutes} min</span>
+                )}
               </p>
             </div>
             <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
@@ -242,109 +305,151 @@ export function SessionSchedulePopup({ planItem, plan, existingAppointment, onCl
           ) : (
             <div className="flex flex-col min-h-0 flex-1 overflow-hidden">
               <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-5">
-              {error && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>
-              )}
 
-              {/* Mini Calendar */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <button onClick={prevMonth} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">‹</button>
-                  <span className="text-sm font-semibold">{monthName}</span>
-                  <button onClick={nextMonth} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">›</button>
-                </div>
-                <div className="grid grid-cols-7 gap-1 text-center">
-                  {["Su","Mo","Tu","We","Th","Fr","Sa"].map(d => (
-                    <div key={d} className="text-xs text-muted-foreground py-1 font-medium">{d}</div>
-                  ))}
-                  {Array.from({ length: firstDay }).map((_, i) => <div key={`e${i}`} />)}
-                  {Array.from({ length: daysInMonth }).map((_, i) => {
-                    const day = i + 1;
-                    const past = isPast(day);
-                    const m = String(viewMonth + 1).padStart(2, "0");
-                    const d = String(day).padStart(2, "0");
-                    const dateStr = `${viewYear}-${m}-${d}`;
-                    const isSelected = selectedDate === dateStr;
-                    return (
-                      <button
-                        key={day}
-                        onClick={() => !past && selectDay(day)}
-                        disabled={past}
-                        className={`h-8 w-8 mx-auto rounded-full text-xs font-medium transition-colors ${
-                          isSelected
-                            ? "bg-primary text-primary-foreground"
-                            : past
-                            ? "text-muted-foreground/40 cursor-not-allowed"
-                            : "hover:bg-muted"
-                        }`}
-                      >
-                        {day}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+                {error && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>
+                )}
 
-              {/* Time slots */}
-              {selectedDate && (
+                {/* Mini Calendar */}
                 <div>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                    Available Times{loadingSlots && " (checking...)"}
-                  </p>
-                  <div className="grid grid-cols-6 gap-1.5">
-                    {TIME_SLOTS.map(slot => {
-                      const busy = busySlots.includes(slot);
-                      const selected = selectedTime === slot;
+                  <div className="flex items-center justify-between mb-3">
+                    <button onClick={prevMonth} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">‹</button>
+                    <span className="text-sm font-semibold">{monthName}</span>
+                    <button onClick={nextMonth} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">›</button>
+                  </div>
+                  <div className="grid grid-cols-7 gap-1 text-center">
+                    {["Su","Mo","Tu","We","Th","Fr","Sa"].map(d => (
+                      <div key={d} className="text-xs text-muted-foreground py-1 font-medium">{d}</div>
+                    ))}
+                    {Array.from({ length: firstDay }).map((_, i) => <div key={`e${i}`} />)}
+                    {Array.from({ length: daysInMonth }).map((_, i) => {
+                      const day = i + 1;
+                      const past = isPast(day);
+                      const m = String(viewMonth + 1).padStart(2, "0");
+                      const d = String(day).padStart(2, "0");
+                      const dateStr = `${viewYear}-${m}-${d}`;
+                      const isSelected = selectedDate === dateStr;
                       return (
                         <button
-                          key={slot}
-                          onClick={() => !busy && setSelectedTime(slot)}
-                          disabled={busy}
-                          className={`rounded-lg py-1.5 text-xs font-medium transition-colors border ${
-                            selected
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : busy
-                              ? "bg-red-50 text-red-300 border-red-100 cursor-not-allowed line-through"
-                              : "hover:bg-primary/10 hover:border-primary/30 border-transparent bg-muted/50"
+                          key={day}
+                          onClick={() => !past && selectDay(day)}
+                          disabled={past}
+                          className={`h-8 w-8 mx-auto rounded-full text-xs font-medium transition-colors ${
+                            isSelected
+                              ? "bg-primary text-primary-foreground"
+                              : past
+                              ? "text-muted-foreground/40 cursor-not-allowed"
+                              : "hover:bg-muted"
                           }`}
                         >
-                          {slot}
+                          {day}
                         </button>
                       );
                     })}
                   </div>
-                  <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <span className="h-2 w-2 rounded bg-primary inline-block" /> Available
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span className="h-2 w-2 rounded bg-red-200 inline-block" /> Booked
-                    </span>
-                  </div>
                 </div>
-              )}
 
-              {/* Summary */}
-              {selectedDate && selectedTime && (
-                <div className="rounded-xl bg-primary/5 border border-primary/20 px-4 py-3 text-sm">
-                  <p className="font-medium">{sessionLabel}</p>
-                  <p className="text-muted-foreground text-xs mt-0.5">
-                    {new Date(`${selectedDate}T${selectedTime}`).toLocaleDateString("en", {
-                      weekday: "long", month: "long", day: "numeric"
-                    })} at {selectedTime} · Session {nextSession}/{planItem.quantity_total}
-                  </p>
-                </div>
-              )}
+                {/* Time slots */}
+                {selectedDate && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                      Available Times
+                      {loadingSlots && <span className="font-normal normal-case ml-1">(checking...)</span>}
+                      {!loadingSlots && serviceDurationMinutes > 0 && (
+                        <span className="font-normal normal-case ml-1 text-muted-foreground/60">
+                          — {serviceDurationMinutes} min sessions
+                        </span>
+                      )}
+                    </p>
+                    <div className="grid grid-cols-6 gap-1.5">
+                      {TIME_SLOTS.map(slot => {
+                        const blocked = blockedSlots.has(slot);
+                        const selected = selectedTime === slot;
+
+                        // Determine why it's blocked for the tooltip
+                        const slotStartMins = slotToMinutes(slot);
+                        const slotEndMins = slotStartMins + serviceDurationMinutes;
+                        const isOccupied = busyWindows.some(w =>
+                          slotStartMins >= w.start && slotStartMins < w.end
+                        );
+                        const wouldOverlap = !isOccupied && busyWindows.some(w =>
+                          slotEndMins > w.start && slotStartMins < w.start
+                        );
+
+                        return (
+                          <button
+                            key={slot}
+                            onClick={() => !blocked && setSelectedTime(slot)}
+                            disabled={blocked}
+                            title={
+                              isOccupied
+                                ? "Already booked"
+                                : wouldOverlap
+                                ? `Would overlap next appointment`
+                                : undefined
+                            }
+                            className={`rounded-lg py-1.5 text-xs font-medium transition-colors border ${
+                              selected
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : isOccupied
+                                ? "bg-red-50 text-red-400 border-red-100 cursor-not-allowed line-through"
+                                : wouldOverlap
+                                ? "bg-orange-50 text-orange-400 border-orange-100 cursor-not-allowed"
+                                : "hover:bg-primary/10 hover:border-primary/30 border-transparent bg-muted/50"
+                            }`}
+                          >
+                            {slot}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Legend */}
+                    <div className="flex flex-wrap gap-4 mt-3 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1.5">
+                        <span className="h-2.5 w-2.5 rounded bg-primary/70 inline-block" />
+                        Available
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="h-2.5 w-2.5 rounded bg-red-300 inline-block" />
+                        Booked
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="h-2.5 w-2.5 rounded bg-orange-300 inline-block" />
+                        Would overlap
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Summary */}
+                {selectedDate && selectedTime && !blockedSlots.has(selectedTime) && (
+                  <div className="rounded-xl bg-primary/5 border border-primary/20 px-4 py-3 text-sm">
+                    <p className="font-medium">{sessionLabel}</p>
+                    <p className="text-muted-foreground text-xs mt-0.5">
+                      {new Date(`${selectedDate}T${selectedTime}`).toLocaleDateString("en", {
+                        weekday: "long", month: "long", day: "numeric"
+                      })} at {selectedTime}
+                      {" "}–{" "}
+                      {(() => {
+                        const end = new Date(`${selectedDate}T${selectedTime}`);
+                        end.setMinutes(end.getMinutes() + serviceDurationMinutes);
+                        return dateToSlot(end);
+                      })()}
+                      {" "}· Session {nextSession}/{planItem.quantity_total}
+                    </p>
+                  </div>
+                )}
               </div>
 
-              {/* Actions - fixed at bottom */}
+              {/* Actions */}
               <div className="flex gap-3 px-5 py-4 shrink-0 border-t">
                 <button onClick={onClose} className="flex-1 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted">
                   Cancel
                 </button>
                 <button
                   onClick={handleBook}
-                  disabled={!selectedDate || !selectedTime || loading}
+                  disabled={!selectedDate || !selectedTime || loading || blockedSlots.has(selectedTime)}
                   className="flex-1 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {loading ? (

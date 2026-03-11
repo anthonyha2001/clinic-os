@@ -7,6 +7,7 @@ import { useTheme } from "next-themes";
 import { MenuIcon } from "./icons";
 import { LocaleSwitcher } from "./LocaleSwitcher";
 import { UserMenu } from "./UserMenu";
+import { NotificationBell } from "./NotificationBell";
 import { Sun, Moon } from "lucide-react";
 
 const PATH_KEYS: Record<string, string> = {
@@ -47,9 +48,7 @@ export function Header({ user, locale, title, onMenuClick }: HeaderProps) {
   const pageTitle = title ?? t(getPageTitleKey(pathname));
   const isDark = mounted ? resolvedTheme === "dark" : theme === "dark";
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  useEffect(() => { setMounted(true); }, []);
 
   return (
     <header className={`sticky top-0 z-50 flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border/60 bg-background px-5 ${isRtl ? "flex-row-reverse" : ""}`}>
@@ -70,6 +69,7 @@ export function Header({ user, locale, title, onMenuClick }: HeaderProps) {
 
       {/* Right controls */}
       <div className="flex items-center gap-1.5">
+        {/* Theme toggle */}
         <button
           type="button"
           onClick={() => setTheme(isDark ? "light" : "dark")}
@@ -81,6 +81,10 @@ export function Header({ user, locale, title, onMenuClick }: HeaderProps) {
             ? (isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />)
             : <Moon className="h-4 w-4" />}
         </button>
+
+        {/* Notification bell */}
+        <NotificationBell locale={locale} />
+
         <LocaleSwitcher />
         <UserMenu user={user} locale={locale} />
       </div>

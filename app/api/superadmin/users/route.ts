@@ -1,126 +1,130 @@
-import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { withAuth } from "@/lib/auth";
 import { pgClient } from "@/db/index";
-import { createClient } from "@supabase/supabase-js";
+import { randomUUID } from "crypto";
 
-function checkAuth() {
-  const token = cookies().get("sa_token")?.value;
-  if (token !== "sa_authenticated") throw new Error("Unauthorized");
-}
+const createUserSchema = z.object({
+  email: z.string().email().max(255).transform((v) => v.trim().toLowerCase()),
+  full_name: z.string().min(1).max(255).transform((v) => v.trim()),
+  role: z
+    .enum(["admin", "manager", "receptionist", "provider", "accountant"])
+    .default("receptionist"),
+});
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
+export const GET = withAuth(
+  { roles: ["admin", "manager"] },
+  async (_request, { user }) => {
+    try {
+      const rows = await pgClient`
+        SELECT u.id, u.full_name, u.email, u.is_active,
+               COALESCE(array_agg(r.name) FILTER (WHERE r.name IS NOT NULL), ARRAY[]::text[]) AS roles
+        FROM users u
+        LEFT JOIN user_roles ur ON ur.user_id = u.id
+        LEFT JOIN roles r ON r.id = ur.role_id AND r.organization_id = u.organization_id
+        WHERE u.organization_id = ${user.organizationId}
+        GROUP BY u.id, u.full_name, u.email, u.is_active
+        ORDER BY u.full_name ASC
+      `;
+
+      const users = (rows as unknown as Record<string, unknown>[]).map((r) => ({
+        id: r.id,
+        fullName: r.full_name,
+        email: r.email,
+        isActive: Boolean(r.is_active),
+        roles: Array.isArray(r.roles) ? (r.roles as string[]) : [],
+      }));
+
+      return NextResponse.json(users);
+    } catch (e) {
+      console.error("GET /api/users error:", e);
+      return NextResponse.json(
+        { error: "Internal server error" },
+        { status: 500 }
+      );
+    }
+  }
 );
 
-export async function POST(request: NextRequest) {
-  try {
-    checkAuth();
-    const body = await request.json();
-    const { email, full_name, phone, organization_id, role = "staff", password } = body;
+export const POST = withAuth(
+  { roles: ["admin", "manager"] },
+  async (request, { user }) => {
+    try {
+      const body = await request.json();
+      const parsed = createUserSchema.safeParse(body);
+      if (!parsed.success) {
+        return NextResponse.json(
+          { error: "Validation failed", details: parsed.error.issues },
+          { status: 422 }
+        );
+      }
+      const { email, full_name: fullName, role: roleName } = parsed.data;
 
-    if (!email || !full_name || !organization_id) {
-      return NextResponse.json({ error: "email, full_name, organization_id required" }, { status: 422 });
-    }
-
-    // 1. Create Supabase auth user
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password: password ?? Math.random().toString(36).slice(-10) + "A1!",
-      email_confirm: true,
-      user_metadata: { full_name, role },
-    });
-    if (authError || !authData.user) {
-      return NextResponse.json({ error: authError?.message ?? "Failed to create auth user" }, { status: 500 });
-    }
-
-    // 2. Set app_metadata IMMEDIATELY so JWT works on first login
-    await supabaseAdmin.auth.admin.updateUserById(authData.user.id, {
-      app_metadata: {
-        organization_id: organization_id,
-        roles: [role],
-        permissions: [],
-      },
-    });
-
-    // 3. Insert into public.users
-    const [user] = await pgClient`
-      INSERT INTO users (id, organization_id, email, full_name, phone, preferred_locale)
-      VALUES (${authData.user.id}, ${organization_id}, ${email}, ${full_name}, ${phone ?? null}, 'en')
-      RETURNING *
-    `;
-
-    // 4. Assign role
-    const allRoles = await pgClient`
-      SELECT id, name FROM roles WHERE organization_id = ${organization_id}
-    `;
-    const allRolesArr = allRoles as unknown as { id: string; name: string }[];
-    const requestedRole = allRolesArr.find(
-      (r) => r.name.toLowerCase() === role.toLowerCase()
-    );
-    const adminRole = allRolesArr.find((r) => r.name.toLowerCase() === "admin");
-    const anyRole = allRolesArr[0];
-    const assignRoleId = requestedRole?.id ?? adminRole?.id ?? anyRole?.id;
-
-    if (assignRoleId) {
-      await pgClient`
-        INSERT INTO user_roles (user_id, role_id)
-        VALUES (${authData.user.id}, ${assignRoleId})
-        ON CONFLICT (user_id, role_id) DO NOTHING
+      const [existing] = await pgClient`
+        SELECT id FROM users
+        WHERE organization_id = ${user.organizationId} AND email = ${email}
       `;
-    }
+      if (existing) {
+        return NextResponse.json(
+          { error: "A user with this email already exists" },
+          { status: 409 }
+        );
+      }
 
-    // 5. Create provider profile if needed
-    if (role === "provider" || role === "doctor") {
-      await pgClient`
-        INSERT INTO provider_profiles (
-          user_id, organization_id, is_accepting_appointments
-        )
-        VALUES (${authData.user.id}, ${organization_id}, true)
-        ON CONFLICT (user_id) DO NOTHING
+      const [role] = await pgClient`
+        SELECT id FROM roles
+        WHERE organization_id = ${user.organizationId} AND name = ${roleName}
       `;
-    }
+      if (!role) {
+        return NextResponse.json(
+          { error: "Role not found in organization" },
+          { status: 404 }
+        );
+      }
 
-    return NextResponse.json({ user, auth_id: authData.user.id }, { status: 201 });
-  } catch (e: unknown) {
-    const err = e as Error;
-    return NextResponse.json({ error: err.message }, { status: 500 });
-  }
-}
+      const newId = randomUUID();
 
-export async function GET(request: NextRequest) {
-  try {
-    checkAuth();
-    const { searchParams } = new URL(request.url);
-    const orgId = searchParams.get("organization_id");
+      await pgClient`
+        INSERT INTO users (id, organization_id, email, full_name)
+        VALUES (${newId}, ${user.organizationId}, ${email}, ${fullName})
+      `;
 
-    const users = orgId
-      ? await pgClient`
-          SELECT u.*, o.name AS org_name,
-            (SELECT r.name FROM user_roles ur 
-             JOIN roles r ON r.id = ur.role_id 
-             WHERE ur.user_id = u.id 
-             LIMIT 1) AS role_name
-          FROM users u
-          JOIN organizations o ON o.id = u.organization_id
-          WHERE u.organization_id = ${orgId}
-          ORDER BY u.created_at DESC
-        `
-      : await pgClient`
-          SELECT u.*, o.name AS org_name,
-            (SELECT r.name FROM user_roles ur 
-             JOIN roles r ON r.id = ur.role_id 
-             WHERE ur.user_id = u.id 
-             LIMIT 1) AS role_name
-          FROM users u
-          JOIN organizations o ON o.id = u.organization_id
-          ORDER BY u.created_at DESC
-          LIMIT 200
+      await pgClient`
+        INSERT INTO user_roles (user_id, role_id, assigned_by)
+        VALUES (${newId}, ${role.id}, ${user.id})
+      `;
+
+      // Auto-create a provider_profiles row so the user appears in the
+      // Providers settings page immediately after creation.
+      if (roleName === "provider") {
+        await pgClient`
+          INSERT INTO provider_profiles (id, organization_id, user_id, is_accepting_appointments)
+          VALUES (gen_random_uuid(), ${user.organizationId}, ${newId}, true)
+          ON CONFLICT (user_id) DO NOTHING
         `;
+      }
 
-    return NextResponse.json(users);
-  } catch (e) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      const [created] = await pgClient`
+        SELECT id, full_name, email, is_active
+        FROM users WHERE id = ${newId}
+      `;
+
+      return NextResponse.json(
+        {
+          id: created.id,
+          fullName: created.full_name,
+          email: created.email,
+          isActive: Boolean(created.is_active),
+          roles: [roleName],
+        },
+        { status: 201 }
+      );
+    } catch (e) {
+      console.error("POST /api/users error:", e);
+      return NextResponse.json(
+        { error: "Internal server error" },
+        { status: 500 }
+      );
+    }
   }
-}
+);

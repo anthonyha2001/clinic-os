@@ -3,6 +3,7 @@ import { withAuth } from "@/lib/auth";
 import { pgClient } from "@/db/index";
 import { updateAppointmentSchema } from "@/lib/validations/appointment";
 import { updateAppointment } from "@/lib/services/appointments/update";
+import { notifyScheduleChange } from "@/lib/notifications/notifyScheduleChange";
 
 export const GET = withAuth(async (_request, { user, params }) => {
   try {
@@ -101,10 +102,16 @@ export const PATCH = withAuth(async (request, { user, params }) => {
       notes?: string | null;
     } = {};
     if (parsed.data.start_time != null) data.start_time = parsed.data.start_time;
-    if (parsed.data.end_time != null) data.end_time = parsed.data.end_time;
-    if (parsed.data.provider_id != null)
-      data.provider_id = parsed.data.provider_id;
+    if (parsed.data.end_time != null)   data.end_time   = parsed.data.end_time;
+    if (parsed.data.provider_id != null) data.provider_id = parsed.data.provider_id;
     if (parsed.data.notes !== undefined) data.notes = parsed.data.notes;
+
+    // Fetch old start_time before updating so we can show "was → now" in notification
+    const [existing] = await pgClient`
+      SELECT start_time FROM appointments
+      WHERE id = ${id} AND organization_id = ${user.organizationId}
+      LIMIT 1
+    `;
 
     const appointment = await updateAppointment({
       appointmentId: id,
@@ -112,6 +119,18 @@ export const PATCH = withAuth(async (request, { user, params }) => {
       changedBy: user.id,
       data,
     });
+
+    // Fire schedule-change notification only when the time actually changed
+    if (data.start_time && existing) {
+      notifyScheduleChange({
+        organizationId: user.organizationId,
+        appointmentId: id,
+        oldStartTime: existing.start_time as string,
+        newStartTime: data.start_time,
+        newEndTime: data.end_time ?? data.start_time,
+        changedByUserId: user.id,
+      }).catch(() => {});
+    }
 
     return NextResponse.json(appointment);
   } catch (e: unknown) {

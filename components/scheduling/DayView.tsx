@@ -196,7 +196,7 @@ export function DayView({
                     />
                     <span className="truncate text-xs font-medium text-foreground">
                       {(provider.user as Record<string, string> | undefined)
-                        ?.full_name?.split(" ")[0] ?? "Provider"}
+                        ?.full_name ?? "Provider"}
                     </span>
                   </div>
                 ) : (

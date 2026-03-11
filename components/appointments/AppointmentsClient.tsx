@@ -481,6 +481,14 @@ export function AppointmentsClient({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [filterDropdownOpen, checkinFilterDropdownOpen]);
   useEffect(() => {
+    function handleScroll() {
+      setOpenMenuId(null);
+      setMenuPosition(null);
+    }
+    window.addEventListener("scroll", handleScroll, true);
+    return () => window.removeEventListener("scroll", handleScroll, true);
+  }, []);
+  useEffect(() => {
     if (checkinFilter === "done") {
       setShowCompleted(true);
     }
@@ -852,8 +860,11 @@ export function AppointmentsClient({
                       setMenuPosition(null);
                     } else {
                       const rect = e.currentTarget.getBoundingClientRect();
+                      const menuHeight = 220;
+                      const spaceBelow = window.innerHeight - rect.bottom;
+                      const openUpward = spaceBelow < menuHeight;
                       setMenuPosition({
-                        top: rect.bottom + 4,
+                        top: openUpward ? rect.top - menuHeight : rect.bottom + 4,
                         right: window.innerWidth - rect.right,
                       });
                       setOpenMenuId(item.appointment_id);

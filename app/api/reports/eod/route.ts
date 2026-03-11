@@ -4,6 +4,7 @@ import { sendAppointmentReminders } from "@/lib/automation/handlers/appointmentR
 import { sendNoShowFollowups } from "@/lib/automation/handlers/noShowFollowup";
 import { runRecallEngine } from "@/lib/automation/handlers/recallEngine";
 import { autoMarkNoShows } from "@/lib/automation/handlers/autoNoShow";
+import { runEndOfDaySummary } from "@/lib/automation/handlers/endOfDaySummary";
 
 export async function POST(request: NextRequest) {
   const secret = request.headers.get("x-cron-secret");
@@ -13,9 +14,12 @@ export async function POST(request: NextRequest) {
 
   try {
     const orgs = await pgClient`
-      SELECT id FROM organizations
-      WHERE is_active = true
+      SELECT id FROM organizations WHERE is_active = true
     `;
+
+    // EOD summary runs once (not per-org loop) — it handles all orgs internally
+    const now = new Date();
+    const isEodWindow = now.getHours() >= 20 && now.getHours() < 21; // 8–9 PM
 
     const results: Record<string, unknown>[] = [];
 
@@ -28,7 +32,13 @@ export async function POST(request: NextRequest) {
           runRecallEngine(orgId).catch((e) => ({ error: String(e) })),
           autoMarkNoShows(orgId).catch((e) => ({ error: String(e) })),
         ]);
-        results.push({ orgId, reminders, noShows, recalls, autoNoShows });
+
+        let eodSummary: unknown = { skipped: "outside EOD window" };
+        if (isEodWindow) {
+          eodSummary = await runEndOfDaySummary(orgId).catch((e) => ({ error: String(e) }));
+        }
+
+        results.push({ orgId, reminders, noShows, recalls, autoNoShows, eodSummary });
       } catch (orgErr) {
         console.error(`Automation failed for org ${orgId}:`, orgErr);
         results.push({ orgId, error: String(orgErr) });

@@ -10,6 +10,7 @@ function checkAuth() {
 export async function POST(request: NextRequest) {
   try {
     checkAuth();
+
     const body = await request.json();
     const { name, slug, timezone = "Asia/Beirut", currency = "USD" } = body;
 
@@ -23,13 +24,47 @@ export async function POST(request: NextRequest) {
       RETURNING *
     `;
 
-    // Seed default roles for the new organization
+    // Seed default roles
     const defaultRoles = ["admin", "manager", "provider", "receptionist", "accountant", "staff"];
     for (const roleName of defaultRoles) {
       await pgClient`
         INSERT INTO roles (id, organization_id, name)
         VALUES (gen_random_uuid(), ${org.id}, ${roleName})
         ON CONFLICT (organization_id, name) DO NOTHING
+      `;
+    }
+
+    // Seed default payment methods
+    const defaultPaymentMethods = [
+      {
+        type: "cash",
+        label_en: "Cash",
+        label_fr: "Espèces",
+        label_ar: "نقداً",
+        display_order: 1,
+      },
+      {
+        type: "card",
+        label_en: "Credit Card",
+        label_fr: "Carte de crédit",
+        label_ar: "بطاقة ائتمان",
+        display_order: 2,
+      },
+    ];
+
+    for (const method of defaultPaymentMethods) {
+      await pgClient`
+        INSERT INTO payment_methods (id, organization_id, type, label_en, label_fr, label_ar, is_active, display_order)
+        VALUES (
+          gen_random_uuid(),
+          ${org.id},
+          ${method.type},
+          ${method.label_en},
+          ${method.label_fr},
+          ${method.label_ar},
+          true,
+          ${method.display_order}
+        )
       `;
     }
 

@@ -87,3 +87,61 @@ export const PATCH = withAuth(
     }
   }
 );
+export const DELETE = withAuth(
+  { roles: ["admin"] },
+  async (_request, { user, params }) => {
+    try {
+      const id = params?.id as string | undefined;
+      if (!id) {
+        return NextResponse.json({ error: "Provider ID required" }, { status: 400 });
+      }
+
+      const [provider] = await pgClient`
+        SELECT pp.id, pp.user_id
+        FROM provider_profiles pp
+        WHERE pp.id = ${id}
+          AND pp.organization_id = ${user.organizationId}
+      `;
+      if (!provider) {
+        return NextResponse.json({ error: "Provider not found" }, { status: 404 });
+      }
+
+      // Block if provider has upcoming appointments
+      const [futureAppt] = await pgClient`
+        SELECT id FROM appointments
+        WHERE provider_id = ${id}
+          AND organization_id = ${user.organizationId}
+          AND status IN ('scheduled', 'confirmed')
+          AND start_time > now()
+        LIMIT 1
+      `;
+      if (futureAppt) {
+        return NextResponse.json(
+          { error: "Cannot delete provider with upcoming appointments. Reassign or cancel them first." },
+          { status: 409 }
+        );
+      }
+
+      // Prevent self-deletion
+      if (provider.user_id === user.id) {
+        return NextResponse.json({ error: "You cannot delete your own account." }, { status: 403 });
+      }
+
+      await pgClient`
+        UPDATE users SET is_active = false, updated_at = now()
+        WHERE id = ${provider.user_id}
+          AND organization_id = ${user.organizationId}
+      `;
+
+      await pgClient`
+        DELETE FROM provider_profiles
+        WHERE id = ${id} AND organization_id = ${user.organizationId}
+      `;
+
+      return NextResponse.json({ ok: true });
+    } catch (e) {
+      console.error("DELETE /api/providers/[id] error:", e);
+      return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    }
+  }
+);
