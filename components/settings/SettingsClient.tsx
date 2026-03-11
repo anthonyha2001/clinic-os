@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Plus, Trash2, Check, Loader2, Pencil, X, Calendar } from "lucide-react";
+import { Plus, Check, Loader2, Pencil, X, Calendar } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useCurrency } from "@/lib/context/CurrencyContext";
 import type { WorkingHours, OffDay, DayKey } from "@/types/schedule";
@@ -56,6 +56,8 @@ type Service = {
   price?: string | number;
   defaultDurationMinutes?: number;
   default_duration_minutes?: number;
+  recall_interval_days?: number | null;
+  recallIntervalDays?: number | null;
   isActive?: boolean;
   is_active?: boolean;
 };
@@ -70,7 +72,12 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
   const [services, setServices] = useState<Service[]>([]);
   const [loadingServices, setLoadingServices] = useState(true);
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<{ name_en: string; price: string; duration: string }>({ name_en: "", price: "", duration: "30" });
+  const [editForm, setEditForm] = useState<{
+    name_en: string;
+    price: string;
+    duration: string;
+    recall_days: string;
+  }>({ name_en: "", price: "", duration: "30", recall_days: "" });
   const [savingEdit, setSavingEdit] = useState(false);
   const [newService, setNewService] = useState({ name_en: "", price: "", duration: "30" });
   const [addingService, setAddingService] = useState(false);
@@ -174,9 +181,7 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
       setOrgSettings((prev) => ({ ...prev, ...d }));
       const nextCurrency = (d?.currency ?? updates.currency) as string | undefined;
       if (nextCurrency && typeof window !== "undefined") {
-        window.dispatchEvent(
-          new CustomEvent("currency-updated", { detail: { currency: nextCurrency } })
-        );
+        window.dispatchEvent(new CustomEvent("currency-updated", { detail: { currency: nextCurrency } }));
       }
       setSettingsSaved(true);
       setTimeout(() => setSettingsSaved(false), 3000);
@@ -239,13 +244,8 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
   }
 
   const DAY_LABELS: Record<DayKey, string> = {
-    monday: "Monday",
-    tuesday: "Tuesday",
-    wednesday: "Wednesday",
-    thursday: "Thursday",
-    friday: "Friday",
-    saturday: "Saturday",
-    sunday: "Sunday",
+    monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday",
+    thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday",
   };
 
   async function testWhatsApp() {
@@ -277,13 +277,16 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
     const name = sv.name_en ?? sv.nameEn ?? "";
     const price = String(sv.defaultPrice ?? sv.price ?? 0);
     const duration = String(sv.defaultDurationMinutes ?? sv.default_duration_minutes ?? 30);
+    const recallDays = (sv.recall_interval_days ?? sv.recallIntervalDays) != null
+      ? String(sv.recall_interval_days ?? sv.recallIntervalDays)
+      : "";
     setEditingServiceId(sv.id);
-    setEditForm({ name_en: name, price, duration });
+    setEditForm({ name_en: name, price, duration, recall_days: recallDays });
   }
 
   function cancelEdit() {
     setEditingServiceId(null);
-    setEditForm({ name_en: "", price: "", duration: "30" });
+    setEditForm({ name_en: "", price: "", duration: "30", recall_days: "" });
   }
 
   async function saveEdit() {
@@ -299,22 +302,35 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
         name_ar: editForm.name_en.trim(),
         default_price: parseFloat(editForm.price) || 0,
         default_duration_minutes: parseInt(editForm.duration, 10) || 30,
+        recall_interval_days: editForm.recall_days
+          ? parseInt(editForm.recall_days, 10)
+          : null,
       }),
     });
     if (res.ok) {
       const d = await res.json();
       setServices(s => s.map(sv => sv.id === editingServiceId ? {
         ...sv,
-        name_en: d.nameEn,
-        nameEn: d.nameEn,
-        defaultPrice: d.defaultPrice,
-        price: d.defaultPrice,
-        defaultDurationMinutes: d.defaultDurationMinutes,
-        default_duration_minutes: d.defaultDurationMinutes,
+        name_en: d.nameEn ?? d.name_en,
+        nameEn: d.nameEn ?? d.name_en,
+        defaultPrice: d.defaultPrice ?? d.price,
+        price: d.defaultPrice ?? d.price,
+        defaultDurationMinutes: d.defaultDurationMinutes ?? d.default_duration_minutes,
+        default_duration_minutes: d.defaultDurationMinutes ?? d.default_duration_minutes,
+        recall_interval_days: d.recallIntervalDays ?? d.recall_interval_days ?? null,
+        recallIntervalDays: d.recallIntervalDays ?? d.recall_interval_days ?? null,
       } : sv));
       cancelEdit();
     }
     setSavingEdit(false);
+  }
+
+  function formatRecall(sv: Service): string {
+    const days = sv.recall_interval_days ?? sv.recallIntervalDays;
+    if (!days) return "—";
+    if (days >= 365) return `${Math.round(days / 365)}yr`;
+    if (days >= 30) return `${Math.round(days / 30)}mo`;
+    return `${days}d`;
   }
 
   return (
@@ -326,7 +342,6 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
         </div>
       )}
 
-      {/* Tabs - hidden when on a dedicated route (layout nav is the only tab row) */}
       {!singleSection && (
         <div className="border-b flex gap-0.5">
           {TABS.map(tab => (
@@ -338,10 +353,9 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
         </div>
       )}
 
-      {/* SERVICES TAB */}
+      {/* ── SERVICES ── */}
       {activeTab === "Services" && (
         <div className="space-y-5">
-          {/* Services list */}
           <div className="rounded-xl border bg-card overflow-hidden">
             <div className="px-5 py-4 border-b flex items-center justify-between">
               <div>
@@ -356,47 +370,32 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
               </button>
             </div>
 
-            {/* Add form */}
             {showAddForm && (
               <div className="px-5 py-4 border-b bg-muted/30">
                 <div className="grid grid-cols-3 gap-3">
                   <div className="col-span-1">
                     <label className="text-xs font-medium text-muted-foreground mb-1 block">Service Name *</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Root Canal"
-                      value={newService.name_en}
+                    <input type="text" placeholder="e.g. Root Canal" value={newService.name_en}
                       onChange={e => setNewService(s => ({ ...s, name_en: e.target.value }))}
-                      className="w-full rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    />
+                      className="w-full rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20" />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground mb-1 block">Price</label>
-                    <input
-                      type="number"
-                      placeholder="0.00"
-                      value={newService.price}
+                    <input type="number" placeholder="0.00" value={newService.price}
                       onChange={e => setNewService(s => ({ ...s, price: e.target.value }))}
-                      className="w-full rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    />
+                      className="w-full rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20" />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground mb-1 block">Duration (min)</label>
-                    <input
-                      type="number"
-                      value={newService.duration}
+                    <input type="number" value={newService.duration}
                       onChange={e => setNewService(s => ({ ...s, duration: e.target.value }))}
-                      className="w-full rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    />
+                      className="w-full rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20" />
                   </div>
                 </div>
                 <div className="flex gap-2 mt-3">
                   <button onClick={() => setShowAddForm(false)} className="rounded-lg border px-4 py-1.5 text-sm hover:bg-muted">Cancel</button>
-                  <button
-                    onClick={addService}
-                    disabled={addingService || !newService.name_en.trim()}
-                    className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5"
-                  >
+                  <button onClick={addService} disabled={addingService || !newService.name_en.trim()}
+                    className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5">
                     {addingService ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
                     Save
                   </button>
@@ -415,6 +414,10 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
                     <th className="px-5 py-3 text-start font-medium text-muted-foreground">Service</th>
                     <th className="px-5 py-3 text-end font-medium text-muted-foreground">Price</th>
                     <th className="px-5 py-3 text-end font-medium text-muted-foreground">Duration</th>
+                    <th className="px-5 py-3 text-end font-medium text-muted-foreground">
+                      Recall
+                      <span className="ml-1 text-[10px] text-muted-foreground/60 font-normal">(interval)</span>
+                    </th>
                     <th className="px-5 py-3 text-center font-medium text-muted-foreground">Status</th>
                     <th className="px-5 py-3 text-center font-medium text-muted-foreground w-24">Actions</th>
                   </tr>
@@ -428,82 +431,88 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
                     const isEditing = editingServiceId === sv.id;
                     return (
                       <tr key={sv.id} className={`border-b hover:bg-muted/30 transition-colors ${!active ? "opacity-50" : ""} ${isEditing ? "bg-primary/5" : ""}`}>
+                        {/* Name */}
                         <td className="px-5 py-3">
                           {isEditing ? (
-                            <input
-                              type="text"
-                              value={editForm.name_en}
+                            <input type="text" value={editForm.name_en}
                               onChange={e => setEditForm(f => ({ ...f, name_en: e.target.value }))}
                               className="w-full rounded border px-2 py-1.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-                              placeholder="Service name"
-                            />
+                              placeholder="Service name" />
                           ) : (
                             <span className="font-medium">{name}</span>
                           )}
                         </td>
+                        {/* Price */}
                         <td className="px-5 py-3 text-end">
                           {isEditing ? (
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={editForm.price}
+                            <input type="number" step="0.01" value={editForm.price}
                               onChange={e => setEditForm(f => ({ ...f, price: e.target.value }))}
                               className="w-20 rounded border px-2 py-1.5 text-sm bg-background text-end focus:outline-none focus:ring-2 focus:ring-primary/20"
-                              placeholder="0"
-                            />
-                          ) : (
-                            format(price)
-                          )}
+                              placeholder="0" />
+                          ) : format(price)}
                         </td>
+                        {/* Duration */}
                         <td className="px-5 py-3 text-end">
                           {isEditing ? (
-                            <input
-                              type="number"
-                              value={editForm.duration}
+                            <input type="number" value={editForm.duration}
                               onChange={e => setEditForm(f => ({ ...f, duration: e.target.value }))}
                               className="w-16 rounded border px-2 py-1.5 text-sm bg-background text-end focus:outline-none focus:ring-2 focus:ring-primary/20"
-                              placeholder="30"
-                            />
+                              placeholder="30" />
                           ) : (
                             <span className="text-muted-foreground">{duration}min</span>
                           )}
                         </td>
+                        {/* Recall */}
+                        <td className="px-5 py-3 text-end">
+                          {isEditing ? (
+                            <div className="flex flex-col items-end gap-0.5">
+                              <input
+                                type="number"
+                                min="1"
+                                value={editForm.recall_days}
+                                onChange={e => setEditForm(f => ({ ...f, recall_days: e.target.value }))}
+                                className="w-20 rounded border px-2 py-1.5 text-sm bg-background text-end focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                placeholder="days"
+                              />
+                              <span className="text-[10px] text-muted-foreground">days (blank = none)</span>
+                            </div>
+                          ) : (
+                            <span className={`text-xs font-medium ${(sv.recall_interval_days ?? sv.recallIntervalDays) ? "text-blue-600" : "text-muted-foreground"}`}>
+                              {formatRecall(sv)}
+                            </span>
+                          )}
+                        </td>
+                        {/* Status */}
                         <td className="px-5 py-3 text-center">
                           {isEditing ? null : (
                             <button
                               onClick={() => toggleService(sv.id, active)}
-                              className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${active ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-red-100 hover:text-red-700 dark:hover:bg-red-900/30 dark:hover:text-red-400" : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 hover:bg-green-100 hover:text-green-700 dark:hover:bg-green-900/30 dark:hover:text-green-400"}`}
+                              className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                                active
+                                  ? "bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700"
+                                  : "bg-gray-100 text-gray-500 hover:bg-green-100 hover:text-green-700"
+                              }`}
                             >
                               {active ? "Active" : "Inactive"}
                             </button>
                           )}
                         </td>
+                        {/* Actions */}
                         <td className="px-5 py-3 text-center">
                           {isEditing ? (
                             <div className="flex items-center justify-center gap-1">
-                              <button
-                                onClick={saveEdit}
-                                disabled={savingEdit || !editForm.name_en.trim()}
-                                className="rounded p-1.5 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 disabled:opacity-50"
-                                title="Save"
-                              >
+                              <button onClick={saveEdit} disabled={savingEdit || !editForm.name_en.trim()}
+                                className="rounded p-1.5 text-green-600 hover:bg-green-100 disabled:opacity-50" title="Save">
                                 {savingEdit ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
                               </button>
-                              <button
-                                onClick={cancelEdit}
-                                disabled={savingEdit}
-                                className="rounded p-1.5 text-muted-foreground hover:bg-muted"
-                                title="Cancel"
-                              >
+                              <button onClick={cancelEdit} disabled={savingEdit}
+                                className="rounded p-1.5 text-muted-foreground hover:bg-muted" title="Cancel">
                                 <X className="size-4" />
                               </button>
                             </div>
                           ) : (
-                            <button
-                              onClick={() => startEditService(sv)}
-                              className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-primary"
-                              title="Edit"
-                            >
+                            <button onClick={() => startEditService(sv)}
+                              className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-primary" title="Edit">
                               <Pencil className="size-4" />
                             </button>
                           )}
@@ -515,10 +524,13 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
               </table>
             )}
           </div>
+          <p className="text-xs text-muted-foreground px-1">
+            💡 <strong>Recall interval</strong>: set how many days after this service a patient should return (e.g. 180 = 6 months for cleaning). Used by the Recall Due dashboard widget.
+          </p>
         </div>
       )}
 
-      {/* PROVIDER TYPES TAB */}
+      {/* ── PROVIDER TYPES ── */}
       {activeTab === "Provider Types" && (
         <div className="rounded-xl border bg-card p-5 space-y-4">
           <div>
@@ -539,137 +551,84 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
         </div>
       )}
 
-      {/* CLINIC INFO TAB */}
+      {/* ── CLINIC INFO ── */}
       {activeTab === "Clinic Info" && (
         <div className="rounded-xl border bg-card p-5 space-y-5">
           <h2 className="text-sm font-semibold mb-4">Clinic Information</h2>
-
           <div className="space-y-2">
             <label className="text-sm font-medium">Clinic Name</label>
             <div className="flex gap-2">
-              <input
-                type="text"
-                value={clinicName}
-                onChange={e => setClinicName(e.target.value)}
+              <input type="text" value={clinicName} onChange={e => setClinicName(e.target.value)}
                 placeholder="Your clinic name"
-                className="flex-1 rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-              />
-              <button
-                type="button"
-                onClick={() => saveSettings({ name: clinicName.trim() })}
+                className="flex-1 rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20" />
+              <button type="button" onClick={() => saveSettings({ name: clinicName.trim() })}
                 disabled={savingSettings || !clinicName.trim() || clinicName.trim() === (orgSettings.name ?? "").trim()}
-                className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+                className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed">
                 {savingSettings ? "Saving..." : "Save"}
               </button>
             </div>
           </div>
-
           <div className="space-y-2">
             <label className="text-sm font-medium">Currency</label>
             <div className="flex gap-2">
-              <select
-                value={currency}
-                onChange={e => setCurrency(e.target.value)}
-                className="flex-1 rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-              >
-                {CURRENCY_OPTIONS.map(c => (
-                  <option key={c.code} value={c.code}>{c.label}</option>
-                ))}
+              <select value={currency} onChange={e => setCurrency(e.target.value)}
+                className="flex-1 rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20">
+                {CURRENCY_OPTIONS.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
               </select>
-              <button
-                type="button"
-                onClick={() => saveSettings({ currency })}
+              <button type="button" onClick={() => saveSettings({ currency })}
                 disabled={savingSettings || currency === (orgSettings.currency ?? "USD")}
-                className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+                className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed">
                 {savingSettings ? "Saving..." : "Save"}
               </button>
             </div>
           </div>
-
           {orgSlug && (
             <div className="rounded-xl border bg-muted/30 p-4">
               <p className="text-sm font-semibold mb-1">Your Public Booking Link</p>
               <p className="text-xs text-muted-foreground mb-3">Share this link with patients so they can book online</p>
               <div className="flex gap-2">
-                <input
-                  readOnly
-                  value={bookingUrl}
-                  className="flex-1 rounded-lg border px-3 py-2 text-sm bg-background font-mono text-xs"
-                />
-                <button
-                  type="button"
-                  onClick={() => bookingUrl && navigator.clipboard.writeText(bookingUrl)}
-                  className="rounded-lg border px-3 py-2 text-xs hover:bg-muted"
-                >
-                  Copy
-                </button>
-                <a
-                  href={`/book/${orgSlug}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-lg bg-primary text-primary-foreground px-3 py-2 text-xs hover:opacity-90"
-                >
-                  Preview
-                </a>
+                <input readOnly value={bookingUrl}
+                  className="flex-1 rounded-lg border px-3 py-2 text-sm bg-background font-mono text-xs" />
+                <button type="button" onClick={() => bookingUrl && navigator.clipboard.writeText(bookingUrl)}
+                  className="rounded-lg border px-3 py-2 text-xs hover:bg-muted">Copy</button>
+                <a href={`/book/${orgSlug}`} target="_blank" rel="noopener noreferrer"
+                  className="rounded-lg bg-primary text-primary-foreground px-3 py-2 text-xs hover:opacity-90">Preview</a>
               </div>
             </div>
           )}
-          {!orgSlug && (
-            <p className="text-sm text-muted-foreground">Loading booking link...</p>
-          )}
+          {!orgSlug && <p className="text-sm text-muted-foreground">Loading booking link...</p>}
         </div>
       )}
 
-      {/* APPEARANCE TAB */}
+      {/* ── APPEARANCE ── */}
       {activeTab === "Appearance" && (
         <div className="rounded-xl border bg-card p-5 space-y-6">
           <h2 className="text-sm font-semibold mb-4">Appearance</h2>
-
           <div className="space-y-3">
             <label className="text-sm font-medium block">Theme Preference</label>
             <div className="flex gap-2 flex-wrap">
               {(["light", "system", "dark"] as const).map(t => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setTheme(t)}
-                  className={`rounded-xl px-4 py-2.5 text-sm font-medium border-2 transition-all capitalize ${
-                    theme === t
-                      ? "border-primary bg-primary/5 text-primary"
-                      : "border-border hover:border-primary/30"
-                  }`}
-                >
+                <button key={t} type="button" onClick={() => setTheme(t)}
+                  className={`rounded-xl px-4 py-2.5 text-sm font-medium border-2 transition-all capitalize ${theme === t ? "border-primary bg-primary/5 text-primary" : "border-border hover:border-primary/30"}`}>
                   {t}
                 </button>
               ))}
             </div>
           </div>
-
           <div className="space-y-2">
             <label className="text-sm font-medium">Currency</label>
             <div className="flex gap-2">
-              <select
-                value={currency}
-                onChange={e => setCurrency(e.target.value)}
-                className="flex-1 max-w-xs rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-              >
-                {CURRENCY_OPTIONS.map(c => (
-                  <option key={c.code} value={c.code}>{c.label}</option>
-                ))}
+              <select value={currency} onChange={e => setCurrency(e.target.value)}
+                className="flex-1 max-w-xs rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20">
+                {CURRENCY_OPTIONS.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
               </select>
-              <button
-                type="button"
-                onClick={() => saveSettings({ currency })}
+              <button type="button" onClick={() => saveSettings({ currency })}
                 disabled={savingSettings || currency === (orgSettings.currency ?? "USD")}
-                className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+                className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed">
                 {savingSettings ? "Saving..." : "Save"}
               </button>
             </div>
           </div>
-
           <div className="space-y-2">
             <label className="text-sm font-medium">Language</label>
             <p className="text-sm text-muted-foreground">
@@ -679,10 +638,9 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
         </div>
       )}
 
-      {/* SCHEDULE TAB */}
+      {/* ── SCHEDULE ── */}
       {activeTab === "Schedule" && (
         <div className="space-y-5">
-          {/* Working Hours */}
           <div className="rounded-xl border bg-card p-5">
             <h2 className="text-sm font-semibold mb-4">Working Hours</h2>
             <p className="text-xs text-muted-foreground mb-4">Set opening hours for each day. Affects appointment booking availability.</p>
@@ -691,138 +649,66 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
                 const s = workingHours[day] ?? DEFAULT_WORKING_HOURS[day];
                 const isOpen = s?.open ?? true;
                 return (
-                  <div
-                    key={day}
-                    className={`flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 ${
-                      isOpen ? "bg-background" : "opacity-50 bg-muted/30"
-                    }`}
-                  >
+                  <div key={day} className={`flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 ${isOpen ? "bg-background" : "opacity-50 bg-muted/30"}`}>
                     <div className="flex items-center gap-2 min-w-[100px]">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setWorkingHours((wh) => ({
-                            ...wh,
-                            [day]: {
-                              ...(wh[day] ?? DEFAULT_WORKING_HOURS[day]),
-                              open: !isOpen,
-                            },
-                          }))
-                        }
-                        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
-                          isOpen ? "bg-primary" : "bg-muted"
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                            isOpen ? "translate-x-6" : "translate-x-1"
-                          }`}
-                        />
+                      <button type="button"
+                        onClick={() => setWorkingHours((wh) => ({ ...wh, [day]: { ...(wh[day] ?? DEFAULT_WORKING_HOURS[day]), open: !isOpen } }))}
+                        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${isOpen ? "bg-primary" : "bg-muted"}`}>
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isOpen ? "translate-x-6" : "translate-x-1"}`} />
                       </button>
                       <span className="text-sm font-medium">{DAY_LABELS[day]}</span>
                     </div>
                     {isOpen ? (
                       <>
                         <div className="flex items-center gap-2">
-                          <input
-                            type="time"
-                            value={s?.from ?? "08:00"}
-                            onChange={(e) =>
-                              setWorkingHours((wh) => ({
-                                ...wh,
-                                [day]: { ...(wh[day] ?? DEFAULT_WORKING_HOURS[day]), from: e.target.value },
-                              }))
-                            }
-                            className="rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-                          />
+                          <input type="time" value={s?.from ?? "08:00"}
+                            onChange={(e) => setWorkingHours((wh) => ({ ...wh, [day]: { ...(wh[day] ?? DEFAULT_WORKING_HOURS[day]), from: e.target.value } }))}
+                            className="rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20" />
                           <span className="text-muted-foreground">to</span>
-                          <input
-                            type="time"
-                            value={s?.to ?? "18:00"}
-                            onChange={(e) =>
-                              setWorkingHours((wh) => ({
-                                ...wh,
-                                [day]: { ...(wh[day] ?? DEFAULT_WORKING_HOURS[day]), to: e.target.value },
-                              }))
-                            }
-                            className="rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-                          />
+                          <input type="time" value={s?.to ?? "18:00"}
+                            onChange={(e) => setWorkingHours((wh) => ({ ...wh, [day]: { ...(wh[day] ?? DEFAULT_WORKING_HOURS[day]), to: e.target.value } }))}
+                            className="rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20" />
                         </div>
                         <div className="flex items-center gap-2">
                           <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <input
-                              type="checkbox"
-                              checked={!!(s?.break_from && s?.break_to)}
+                            <input type="checkbox" checked={!!(s?.break_from && s?.break_to)}
                               onChange={(e) => {
                                 const hasBreak = e.target.checked;
-                                setWorkingHours((wh) => ({
-                                  ...wh,
-                                  [day]: {
-                                    ...(wh[day] ?? DEFAULT_WORKING_HOURS[day]),
-                                    break_from: hasBreak ? "13:00" : null,
-                                    break_to: hasBreak ? "14:00" : null,
-                                  },
-                                }));
+                                setWorkingHours((wh) => ({ ...wh, [day]: { ...(wh[day] ?? DEFAULT_WORKING_HOURS[day]), break_from: hasBreak ? "13:00" : null, break_to: hasBreak ? "14:00" : null } }));
                               }}
-                              className="rounded border"
-                            />
+                              className="rounded border" />
                             Break
                           </label>
                           {s?.break_from && s?.break_to && (
                             <>
-                              <input
-                                type="time"
-                                value={s.break_from}
-                                onChange={(ev) =>
-                                  setWorkingHours((wh) => ({
-                                    ...wh,
-                                    [day]: { ...(wh[day] ?? DEFAULT_WORKING_HOURS[day]), break_from: ev.target.value },
-                                  }))
-                                }
-                                className="rounded-lg border px-2 py-1.5 text-xs bg-background"
-                              />
+                              <input type="time" value={s.break_from}
+                                onChange={(ev) => setWorkingHours((wh) => ({ ...wh, [day]: { ...(wh[day] ?? DEFAULT_WORKING_HOURS[day]), break_from: ev.target.value } }))}
+                                className="rounded-lg border px-2 py-1.5 text-xs bg-background" />
                               <span className="text-muted-foreground text-xs">-</span>
-                              <input
-                                type="time"
-                                value={s.break_to}
-                                onChange={(ev) =>
-                                  setWorkingHours((wh) => ({
-                                    ...wh,
-                                    [day]: { ...(wh[day] ?? DEFAULT_WORKING_HOURS[day]), break_to: ev.target.value },
-                                  }))
-                                }
-                                className="rounded-lg border px-2 py-1.5 text-xs bg-background"
-                              />
+                              <input type="time" value={s.break_to}
+                                onChange={(ev) => setWorkingHours((wh) => ({ ...wh, [day]: { ...(wh[day] ?? DEFAULT_WORKING_HOURS[day]), break_to: ev.target.value } }))}
+                                className="rounded-lg border px-2 py-1.5 text-xs bg-background" />
                             </>
                           )}
                         </div>
                       </>
                     ) : (
-                      <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                        Closed
-                      </span>
+                      <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">Closed</span>
                     )}
                   </div>
                 );
               })}
             </div>
             <div className="mt-4 flex items-center gap-3">
-              <button
-                type="button"
-                onClick={saveWorkingHours}
-                disabled={savingSchedule}
-                className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
-              >
+              <button type="button" onClick={saveWorkingHours} disabled={savingSchedule}
+                className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center gap-2">
                 {savingSchedule ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
                 Save Working Hours
               </button>
-              {scheduleSaved && (
-                <span className="text-sm text-green-600 dark:text-green-400">Saved successfully</span>
-              )}
+              {scheduleSaved && <span className="text-sm text-green-600">Saved successfully</span>}
             </div>
           </div>
 
-          {/* Off Days */}
           <div className="rounded-xl border bg-card p-5">
             <h2 className="text-sm font-semibold mb-4">Off Days / Holidays</h2>
             <p className="text-xs text-muted-foreground mb-4">Add dates when the clinic is closed. Recurring off days repeat every year.</p>
@@ -838,48 +724,27 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
                     acc[month].push(o);
                     return acc;
                   }, {});
-                  const months = Object.keys(grouped).sort();
-                  return months.map((month) => {
+                  return Object.keys(grouped).sort().map((month) => {
                     const year = month.slice(0, 4);
                     const m = parseInt(month.slice(5), 10);
-                    const monthLabel = new Date(parseInt(year, 10), m - 1, 1).toLocaleDateString("en", {
-                      month: "long",
-                      year: "numeric",
-                    });
+                    const monthLabel = new Date(parseInt(year, 10), m - 1, 1).toLocaleDateString("en", { month: "long", year: "numeric" });
                     return (
                       <div key={month}>
                         <p className="text-xs font-medium text-muted-foreground mb-2">{monthLabel}</p>
                         <div className="flex flex-wrap gap-2">
                           {grouped[month]!.map((o) => {
                             const d = new Date(o.date + "T12:00:00");
-                            const dateLabel = d.toLocaleDateString("en", {
-                              weekday: "long",
-                              month: "long",
-                              day: "numeric",
-                              year: "numeric",
-                            });
-                            const isToday = o.date === today;
+                            const dateLabel = d.toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
                             const isUpcoming = o.date >= today;
                             return (
-                              <div
-                                key={o.id}
-                                className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
-                                  isToday || isUpcoming
-                                    ? "border-primary/30 bg-primary/5"
-                                    : "border-border bg-muted/20"
-                                }`}
-                              >
+                              <div key={o.id} className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${isUpcoming ? "border-primary/30 bg-primary/5" : "border-border bg-muted/20"}`}>
                                 <Calendar className="size-4 text-muted-foreground shrink-0" />
                                 <div>
                                   <p className="font-medium">{dateLabel}</p>
                                   <p className="text-xs text-muted-foreground">{o.label}{o.recurring ? " (recurring)" : ""}</p>
                                 </div>
-                                <button
-                                  type="button"
-                                  onClick={() => removeOffDay(o.id)}
-                                  className="ml-auto rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                                  aria-label="Remove"
-                                >
+                                <button type="button" onClick={() => removeOffDay(o.id)}
+                                  className="ml-auto rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
                                   <X className="size-4" />
                                 </button>
                               </div>
@@ -896,59 +761,29 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
               <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
                 <div>
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">Date</label>
-                  <input
-                    type="date"
-                    value={newOffDay.date}
-                    onChange={(e) => setNewOffDay((n) => ({ ...n, date: e.target.value }))}
-                    className="w-full rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
+                  <input type="date" value={newOffDay.date} onChange={(e) => setNewOffDay((n) => ({ ...n, date: e.target.value }))}
+                    className="w-full rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">Label</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Christmas, Staff Training"
-                    value={newOffDay.label}
+                  <input type="text" placeholder="e.g. Christmas, Staff Training" value={newOffDay.label}
                     onChange={(e) => setNewOffDay((n) => ({ ...n, label: e.target.value }))}
-                    className="w-full rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
+                    className="w-full rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20" />
                 </div>
                 <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={newOffDay.recurring}
-                    onChange={(e) => setNewOffDay((n) => ({ ...n, recurring: e.target.checked }))}
-                    className="rounded border"
-                  />
+                  <input type="checkbox" checked={newOffDay.recurring} onChange={(e) => setNewOffDay((n) => ({ ...n, recurring: e.target.checked }))} className="rounded border" />
                   Repeat every year
                 </label>
                 <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAddOffDay(false);
-                      setNewOffDay({ date: "", label: "", recurring: false });
-                    }}
-                    className="rounded-lg border px-4 py-2 text-sm hover:bg-muted"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={addOffDay}
-                    disabled={!newOffDay.date || !newOffDay.label.trim()}
-                    className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50"
-                  >
-                    Save
-                  </button>
+                  <button type="button" onClick={() => { setShowAddOffDay(false); setNewOffDay({ date: "", label: "", recurring: false }); }}
+                    className="rounded-lg border px-4 py-2 text-sm hover:bg-muted">Cancel</button>
+                  <button type="button" onClick={addOffDay} disabled={!newOffDay.date || !newOffDay.label.trim()}
+                    className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50">Save</button>
                 </div>
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={() => setShowAddOffDay(true)}
-                className="rounded-lg border border-dashed px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground flex items-center gap-2"
-              >
+              <button type="button" onClick={() => setShowAddOffDay(true)}
+                className="rounded-lg border border-dashed px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground flex items-center gap-2">
                 <Plus className="size-4" /> Add Off Day
               </button>
             )}
@@ -956,26 +791,18 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
         </div>
       )}
 
-      {/* WHATSAPP TAB */}
+      {/* ── WHATSAPP ── */}
       {activeTab === "WhatsApp" && (
         <div className="space-y-5">
           <div className="rounded-xl border bg-card p-5">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-sm font-semibold">WhatsApp Messaging</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Send appointment reminders and no-show followups via WhatsApp
-                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">Send appointment reminders and no-show followups via WhatsApp</p>
               </div>
-              <button
-                onClick={() => saveSettings({ whatsapp_enabled: !orgSettings.whatsapp_enabled })}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  orgSettings.whatsapp_enabled ? "bg-green-500" : "bg-muted"
-                }`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                  orgSettings.whatsapp_enabled ? "translate-x-6" : "translate-x-1"
-                }`} />
+              <button onClick={() => saveSettings({ whatsapp_enabled: !orgSettings.whatsapp_enabled })}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${orgSettings.whatsapp_enabled ? "bg-green-500" : "bg-muted"}`}>
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${orgSettings.whatsapp_enabled ? "translate-x-6" : "translate-x-1"}`} />
               </button>
             </div>
           </div>
@@ -984,19 +811,12 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
             <h2 className="text-sm font-semibold">WhatsApp Provider</h2>
             <div className="grid grid-cols-3 gap-3">
               {[
-                { id: "meta", label: "Meta Business API", desc: "Official WhatsApp Business", icon: "🟢" },
-                { id: "twilio", label: "Twilio", desc: "WhatsApp via Twilio", icon: "🔴" },
-                { id: "mock", label: "Mock (Testing)", desc: "Logs to console only", icon: "🧪" },
+                { id: "meta",   label: "Meta Business API", desc: "Official WhatsApp Business", icon: "🟢" },
+                { id: "twilio", label: "Twilio",             desc: "WhatsApp via Twilio",        icon: "🔴" },
+                { id: "mock",   label: "Mock (Testing)",     desc: "Logs to console only",       icon: "🧪" },
               ].map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => setOrgSettings((s) => ({ ...s, whatsapp_provider: p.id }))}
-                  className={`rounded-xl border-2 p-4 text-start transition-all ${
-                    orgSettings.whatsapp_provider === p.id
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/30"
-                  }`}
-                >
+                <button key={p.id} onClick={() => setOrgSettings((s) => ({ ...s, whatsapp_provider: p.id }))}
+                  className={`rounded-xl border-2 p-4 text-start transition-all ${orgSettings.whatsapp_provider === p.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/30"}`}>
                   <p className="text-xl mb-1">{p.icon}</p>
                   <p className="text-sm font-semibold">{p.label}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">{p.desc}</p>
@@ -1007,141 +827,77 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
             {orgSettings.whatsapp_provider === "meta" && (
               <div className="space-y-3 pt-2 border-t">
                 <p className="text-xs text-muted-foreground">
-                  Get these from{" "}
-                  <a href="https://developers.facebook.com/apps" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                    Meta Developer Console
-                  </a>
+                  Get these from <a href="https://developers.facebook.com/apps" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Meta Developer Console</a>
                 </p>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">WhatsApp Phone Number *</label>
-                  <input
-                    type="text"
-                    placeholder="+961 70 000 000"
-                    value={orgSettings.whatsapp_number ?? ""}
-                    onChange={(e) => setOrgSettings((s) => ({ ...s, whatsapp_number: e.target.value }))}
-                    className="w-full rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Phone Number ID *</label>
-                  <input
-                    type="text"
-                    placeholder="1234567890123456"
-                    value={orgSettings.whatsapp_phone_number_id ?? ""}
-                    onChange={(e) => setOrgSettings((s) => ({ ...s, whatsapp_phone_number_id: e.target.value }))}
-                    className="w-full rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Access Token *</label>
-                  <input
-                    type="password"
-                    placeholder="EAAxxxxx..."
-                    value={orgSettings.whatsapp_api_token ?? ""}
-                    onChange={(e) => setOrgSettings((s) => ({ ...s, whatsapp_api_token: e.target.value }))}
-                    className="w-full rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
-                </div>
+                {[
+                  { label: "WhatsApp Phone Number *", key: "whatsapp_number", placeholder: "+961 70 000 000", type: "text" },
+                  { label: "Phone Number ID *", key: "whatsapp_phone_number_id", placeholder: "1234567890123456", type: "text" },
+                  { label: "Access Token *", key: "whatsapp_api_token", placeholder: "EAAxxxxx...", type: "password" },
+                ].map(({ label, key, placeholder, type }) => (
+                  <div key={key}>
+                    <label className="text-xs font-medium text-muted-foreground mb-1 block">{label}</label>
+                    <input type={type} placeholder={placeholder}
+                      value={(orgSettings as Record<string, string>)[key] ?? ""}
+                      onChange={(e) => setOrgSettings((s) => ({ ...s, [key]: e.target.value }))}
+                      className="w-full rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                  </div>
+                ))}
               </div>
             )}
 
             {orgSettings.whatsapp_provider === "twilio" && (
               <div className="space-y-3 pt-2 border-t">
                 <p className="text-xs text-muted-foreground">
-                  Get these from{" "}
-                  <a href="https://console.twilio.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                    Twilio Console
-                  </a>
+                  Get these from <a href="https://console.twilio.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Twilio Console</a>
                 </p>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">WhatsApp From Number *</label>
-                  <input
-                    type="text"
-                    placeholder="+14155238886"
-                    value={orgSettings.whatsapp_number ?? ""}
-                    onChange={(e) => setOrgSettings((s) => ({ ...s, whatsapp_number: e.target.value }))}
-                    className="w-full rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Account SID:Auth Token * (format: SID:TOKEN)</label>
-                  <input
-                    type="password"
-                    placeholder="ACxxxxxxxxx:your_auth_token"
-                    value={orgSettings.whatsapp_api_token ?? ""}
-                    onChange={(e) => setOrgSettings((s) => ({ ...s, whatsapp_api_token: e.target.value }))}
-                    className="w-full rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
-                </div>
+                {[
+                  { label: "WhatsApp From Number *", key: "whatsapp_number", placeholder: "+14155238886", type: "text" },
+                  { label: "Account SID:Auth Token * (format: SID:TOKEN)", key: "whatsapp_api_token", placeholder: "ACxxxxxxxxx:your_auth_token", type: "password" },
+                ].map(({ label, key, placeholder, type }) => (
+                  <div key={key}>
+                    <label className="text-xs font-medium text-muted-foreground mb-1 block">{label}</label>
+                    <input type={type} placeholder={placeholder}
+                      value={(orgSettings as Record<string, string>)[key] ?? ""}
+                      onChange={(e) => setOrgSettings((s) => ({ ...s, [key]: e.target.value }))}
+                      className="w-full rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                  </div>
+                ))}
               </div>
             )}
 
             {orgSettings.whatsapp_provider === "mock" && (
-              <div className="rounded-lg bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-900/50 px-4 py-3 text-sm text-yellow-800 dark:text-yellow-300 mt-2">
+              <div className="rounded-lg bg-yellow-50 border border-yellow-200 px-4 py-3 text-sm text-yellow-800 mt-2">
                 🧪 Mock mode — messages will be logged to the server console only. No real WhatsApp messages sent.
               </div>
             )}
 
             <div className="flex gap-2 pt-2">
-              <button
-                onClick={() =>
-                  saveSettings({
-                    whatsapp_provider: orgSettings.whatsapp_provider,
-                    whatsapp_number: orgSettings.whatsapp_number,
-                    whatsapp_api_token: orgSettings.whatsapp_api_token,
-                    whatsapp_phone_number_id: orgSettings.whatsapp_phone_number_id,
-                  })
-                }
+              <button onClick={() => saveSettings({ whatsapp_provider: orgSettings.whatsapp_provider, whatsapp_number: orgSettings.whatsapp_number, whatsapp_api_token: orgSettings.whatsapp_api_token, whatsapp_phone_number_id: orgSettings.whatsapp_phone_number_id })}
                 disabled={savingSettings}
-                className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
-              >
+                className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center gap-2">
                 {savingSettings ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
                 Save Configuration
               </button>
-              {settingsSaved && (
-                <span className="text-sm text-green-600 flex items-center gap-1">
-                  <Check className="size-4" /> Saved!
-                </span>
-              )}
+              {settingsSaved && <span className="text-sm text-green-600 flex items-center gap-1"><Check className="size-4" /> Saved!</span>}
             </div>
           </div>
 
           <div className="rounded-xl border bg-card p-5 space-y-3">
             <h2 className="text-sm font-semibold">Test WhatsApp Message</h2>
-            <p className="text-xs text-muted-foreground">
-              Send a test message to verify your configuration is working.
-            </p>
+            <p className="text-xs text-muted-foreground">Send a test message to verify your configuration is working.</p>
             <div className="flex gap-2">
-              <input
-                type="tel"
-                placeholder="+961 70 000 000"
-                value={testPhone}
-                onChange={(e) => setTestPhone(e.target.value)}
-                className="flex-1 rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-              />
-              <button
-                onClick={testWhatsApp}
-                disabled={testLoading || !testPhone || !orgSettings.whatsapp_enabled}
-                className="rounded-lg bg-green-600 text-white px-4 py-2 text-sm font-medium hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
-              >
+              <input type="tel" placeholder="+961 70 000 000" value={testPhone} onChange={(e) => setTestPhone(e.target.value)}
+                className="flex-1 rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20" />
+              <button onClick={testWhatsApp} disabled={testLoading || !testPhone || !orgSettings.whatsapp_enabled}
+                className="rounded-lg bg-green-600 text-white px-4 py-2 text-sm font-medium hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
                 {testLoading ? <Loader2 className="size-4 animate-spin" /> : "📱 Send Test"}
               </button>
             </div>
-            {!orgSettings.whatsapp_enabled && (
-              <p className="text-xs text-orange-500">⚠️ Enable WhatsApp above before testing</p>
-            )}
+            {!orgSettings.whatsapp_enabled && <p className="text-xs text-orange-500">⚠️ Enable WhatsApp above before testing</p>}
             {testResult && (
-              <div
-                className={`rounded-lg px-4 py-3 text-sm ${
-                  testResult.success
-                    ? "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900/50 text-green-800 dark:text-green-300"
-                    : "bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 text-red-800 dark:text-red-300"
-                }`}
-              >
+              <div className={`rounded-lg px-4 py-3 text-sm ${testResult.success ? "bg-green-50 border border-green-200 text-green-800" : "bg-red-50 border border-red-200 text-red-800"}`}>
                 {testResult.success
-                  ? testResult.mock
-                    ? "✅ Mock message logged to server console (no real message sent)"
-                    : "✅ WhatsApp message sent successfully!"
+                  ? testResult.mock ? "✅ Mock message logged to server console (no real message sent)" : "✅ WhatsApp message sent successfully!"
                   : `❌ Failed: ${testResult.error}`}
               </div>
             )}
@@ -1153,36 +909,13 @@ export function SettingsClient({ locale, defaultTab }: { locale: string; default
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-2">📅 Appointment Reminder (sent 1 day before)</p>
                 <div className="rounded-xl bg-[#DCF8C6] p-3 text-sm font-mono text-gray-800 whitespace-pre-line max-w-sm">
-                  {`Hello [Patient Name]! 👋
-
-This is a reminder from *[Clinic Name]*.
-
-📅 You have an appointment *tomorrow*:
-- Date: Monday, March 3
-- Time: 10:00 AM
-- Service: Teeth Cleaning
-- Doctor: Dr. Smith
-
-Please arrive 5 minutes early. 
-Reschedule: [booking link]
-
-See you tomorrow! 😊`}
+                  {`Hello [Patient Name]! 👋\n\nThis is a reminder from *[Clinic Name]*.\n\n📅 You have an appointment *tomorrow*:\n- Date: Monday, March 3\n- Time: 10:00 AM\n- Service: Teeth Cleaning\n- Doctor: Dr. Smith\n\nPlease arrive 5 minutes early.\nReschedule: [booking link]\n\nSee you tomorrow! 😊`}
                 </div>
               </div>
               <div>
-                <p className="text-xs font-medium text-muted-foreground mb-2">👻 No-Show Followup (sent 1 hour after missed appointment)</p>
+                <p className="text-xs font-medium text-muted-foreground mb-2">💬 No-Show Followup (sent 1 hour after missed appointment)</p>
                 <div className="rounded-xl bg-[#DCF8C6] p-3 text-sm font-mono text-gray-800 whitespace-pre-line max-w-sm">
-                  {`Hello [Patient Name],
-
-We noticed you missed your appointment 
-today at *10:00 AM* with Dr. Smith.
-
-We hope everything is okay! 🙏
-
-Would you like to reschedule?
-👉 [booking link]
-
-See you soon!`}
+                  {`Hello [Patient Name],\n\nWe noticed you missed your appointment\ntoday at *10:00 AM* with Dr. Smith.\n\nWe hope everything is okay! 🙏\n\nWould you like to reschedule?\n👉 [booking link]\n\nSee you soon!`}
                 </div>
               </div>
             </div>

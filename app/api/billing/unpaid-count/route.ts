@@ -15,7 +15,7 @@ export const GET = withAuth(async (request, { user }) => {
       SELECT COUNT(*)::int AS count
       FROM invoices
       WHERE organization_id = ${user.organizationId}
-        AND status IN ('draft', 'sent', 'partially_paid')
+        AND status IN ('issued', 'partially_paid')
     `;
 
     let newFromAppointmentCount = 0;
@@ -44,7 +44,6 @@ export const GET = withAuth(async (request, { user }) => {
     );
   } catch (e) {
     console.error("GET /api/billing/unpaid-count error:", e);
-    // Badge failures should never break navigation UI.
     return NextResponse.json({ count: 0, new_from_appointment_count: 0 });
   }
 });

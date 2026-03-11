@@ -5,14 +5,12 @@ import { pgClient } from "@/db/index";
 export const GET = withAuth(async (request, { user }) => {
   const { searchParams } = new URL(request.url);
   const weekStart = searchParams.get("week_start");
-
   const start = weekStart ? new Date(weekStart) : (() => {
     const d = new Date();
-    d.setDate(d.getDate() - d.getDay() + 1); // Monday
+    d.setDate(d.getDate() - d.getDay() + 1);
     d.setHours(0, 0, 0, 0);
     return d;
   })();
-
   const end = new Date(start);
   end.setDate(start.getDate() + 8);
 
@@ -29,7 +27,8 @@ export const GET = withAuth(async (request, { user }) => {
       s.name_en AS service_name,
       s.default_duration_minutes AS duration,
       ci.id AS checkin_id,
-      ci.status AS checkin_status
+      ci.status AS checkin_status,
+      COALESCE(rs.score, 0) AS risk_score
     FROM appointments a
     JOIN patients p ON p.id = a.patient_id
     JOIN provider_profiles pp ON pp.id = a.provider_id
@@ -37,6 +36,9 @@ export const GET = withAuth(async (request, { user }) => {
     LEFT JOIN appointment_lines al ON al.appointment_id = a.id
     LEFT JOIN services s ON s.id = al.service_id
     LEFT JOIN appointment_checkins ci ON ci.appointment_id = a.id
+    LEFT JOIN risk_scores rs
+      ON rs.patient_id = p.id
+      AND rs.organization_id = a.organization_id
     WHERE a.organization_id = ${user.organizationId}
       AND a.start_time >= ${start.toISOString()}
       AND a.start_time < ${end.toISOString()}

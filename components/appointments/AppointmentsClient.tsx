@@ -29,6 +29,7 @@ import { DayView } from "@/components/scheduling/DayView";
 import { WeekView } from "@/components/scheduling/WeekView";
 import { AppointmentPanel } from "@/components/scheduling/AppointmentPanel";
 import { AppointmentFormDrawer } from "@/components/scheduling/AppointmentFormDrawer";
+import { RiskBadge } from "@/components/appointments/RiskBadge";
 import { useFetch, useParallelFetch } from "@/hooks/useFetch";
 import { apiCache } from "@/lib/cache/apiCache";
 import type { WorkingHours } from "@/types/schedule";
@@ -75,6 +76,7 @@ type QueueAppointment = {
   checkin_id: string | null;
   checkin_status: CheckinStatus | null;
   notes?: string | null;
+  risk_score?: number | null;
 };
 
 type PatientFile = {
@@ -127,9 +129,7 @@ const CONDITION_COLORS: Record<string, string> = {
 
 function getMondayOfWeek(date: Date): Date {
   const d = new Date(date);
-  const day = d.getDay(); // 0=Sun, 1=Mon...6=Sat
-  // For Sunday, go back 6 days to get Monday of same display week.
-  // For other days, normal Monday calculation.
+  const day = d.getDay();
   const diff = day === 0 ? -6 : 1 - day;
   d.setDate(d.getDate() + diff);
   d.setHours(0, 0, 0, 0);
@@ -204,16 +204,10 @@ export function AppointmentsClient({
   });
   const [viewMode, setViewMode] = useState<ViewMode>("day");
   const [selectedProviderId, setSelectedProviderId] = useState<string>("all");
-  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(
-    null
-  );
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [showNewAppointmentForm, setShowNewAppointmentForm] = useState(false);
-  const [formSlot, setFormSlot] = useState<{ date: Date; providerId?: string } | null>(
-    null
-  );
-  const [rescheduleTarget, setRescheduleTarget] = useState<QueueAppointment | null>(
-    null
-  );
+  const [formSlot, setFormSlot] = useState<{ date: Date; providerId?: string } | null>(null);
+  const [rescheduleTarget, setRescheduleTarget] = useState<QueueAppointment | null>(null);
   const [checkinFilter, setCheckinFilter] = useState<CheckinFilter>("all");
   const [refreshTick, setRefreshTick] = useState(0);
   const [time, setTime] = useState(nowLabel());
@@ -270,9 +264,7 @@ export function AppointmentsClient({
     receptionWeek: QueueAppointment[];
     providers: Provider[] | { providers?: Provider[] };
   }>(requests, 30_000);
-  const { data: settingsData } = useFetch<OrgSettings>("/api/settings", {
-    ttl: 300_000,
-  });
+  const { data: settingsData } = useFetch<OrgSettings>("/api/settings", { ttl: 300_000 });
 
   const providers = useMemo(() => {
     const raw = data.providers;
@@ -305,15 +297,7 @@ export function AppointmentsClient({
   }, [queueAppointments]);
 
   const currentDayWorkingHours = useMemo(() => {
-    const dayKeys = [
-      "sunday",
-      "monday",
-      "tuesday",
-      "wednesday",
-      "thursday",
-      "friday",
-      "saturday",
-    ] as const;
+    const dayKeys = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
     const dayKey = dayKeys[selectedDate.getDay()];
     const daySchedule = settingsData?.working_hours?.[dayKey];
     if (!daySchedule) return null;
@@ -329,30 +313,23 @@ export function AppointmentsClient({
   const filteredAppointments = useMemo(() => {
     if (selectedProviderId === "all") return appointments;
     return appointments.filter((appt) => {
-      const providerId = (appt.provider_id ??
-        (appt.provider as Record<string, unknown>)?.id) as string | undefined;
+      const providerId = (appt.provider_id ?? (appt.provider as Record<string, unknown>)?.id) as string | undefined;
       return providerId === selectedProviderId;
     });
   }, [appointments, selectedProviderId]);
 
   const selectedDayQueue = useMemo(() => {
     const day = selectedDate.toDateString();
-    return queueAppointments.filter(
-      (a) => new Date(a.start_time).toDateString() === day
-    );
+    return queueAppointments.filter((a) => new Date(a.start_time).toDateString() === day);
   }, [queueAppointments, selectedDate]);
 
   const filteredQueue = useMemo(() => {
     if (checkinFilter === "all") return selectedDayQueue;
-    if (checkinFilter === "not_checked_in")
-      return selectedDayQueue.filter((q) => !q.checkin_id);
-    if (checkinFilter === "waiting") {
-      return selectedDayQueue.filter(
-        (q) => !q.checkin_id || q.checkin_status === "waiting"
-      );
-    }
+    if (checkinFilter === "not_checked_in") return selectedDayQueue.filter((q) => !q.checkin_id);
+    if (checkinFilter === "waiting") return selectedDayQueue.filter((q) => !q.checkin_id || q.checkin_status === "waiting");
     return selectedDayQueue.filter((q) => q.checkin_status === checkinFilter);
   }, [selectedDayQueue, checkinFilter]);
+
   const sortedQueue = useMemo(
     () =>
       [...filteredQueue].sort((a, b) => {
@@ -364,30 +341,17 @@ export function AppointmentsClient({
       }),
     [filteredQueue]
   );
+
   const activeQueue = useMemo(
-    () =>
-      sortedQueue.filter(
-        (item) =>
-          item.appointment_status !== "canceled" &&
-          item.checkin_status !== "done" &&
-          item.checkin_status !== "skipped"
-      ),
+    () => sortedQueue.filter((item) => item.appointment_status !== "canceled" && item.checkin_status !== "done" && item.checkin_status !== "skipped"),
     [sortedQueue]
   );
   const completedQueue = useMemo(
-    () =>
-      sortedQueue.filter(
-        (item) => item.checkin_status === "done" || item.checkin_status === "skipped"
-      ),
+    () => sortedQueue.filter((item) => item.checkin_status === "done" || item.checkin_status === "skipped"),
     [sortedQueue]
   );
   const canceledQueue = useMemo(
-    () =>
-      allQueueData.filter(
-        (item) =>
-          new Date(item.start_time).toDateString() === selectedDate.toDateString() &&
-          item.appointment_status === "canceled"
-      ),
+    () => allQueueData.filter((item) => new Date(item.start_time).toDateString() === selectedDate.toDateString() && item.appointment_status === "canceled"),
     [allQueueData, selectedDate]
   );
   const noShowQueue = useMemo(
@@ -395,11 +359,7 @@ export function AppointmentsClient({
       filteredAppointments
         .filter((a) => {
           const start = (a.start_time ?? a.startTime) as string | undefined;
-          return (
-            !!start &&
-            new Date(start).toDateString() === selectedDate.toDateString() &&
-            String(a.status ?? "").toLowerCase() === "no_show"
-          );
+          return !!start && new Date(start).toDateString() === selectedDate.toDateString() && String(a.status ?? "").toLowerCase() === "no_show";
         })
         .map((a) => {
           const provider = (a.provider as Record<string, unknown> | undefined) ?? {};
@@ -428,6 +388,7 @@ export function AppointmentsClient({
             checkin_id: null,
             checkin_status: "skipped" as CheckinStatus,
             notes: (a.notes as string | null | undefined) ?? null,
+            risk_score: null,
           } satisfies QueueAppointment;
         }),
     [filteredAppointments, selectedDate]
@@ -455,6 +416,7 @@ export function AppointmentsClient({
     const t = setInterval(refreshAll, 30_000);
     return () => clearInterval(t);
   }, []);
+
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       const target = e.target as Node;
@@ -462,24 +424,17 @@ export function AppointmentsClient({
         setOpenMenuId(null);
         setMenuPosition(null);
       }
-      if (
-        filterDropdownOpen &&
-        filterDropdownRef.current &&
-        !filterDropdownRef.current.contains(target)
-      ) {
+      if (filterDropdownOpen && filterDropdownRef.current && !filterDropdownRef.current.contains(target)) {
         setFilterDropdownOpen(false);
       }
-      if (
-        checkinFilterDropdownOpen &&
-        checkinFilterDropdownRef.current &&
-        !checkinFilterDropdownRef.current.contains(target)
-      ) {
+      if (checkinFilterDropdownOpen && checkinFilterDropdownRef.current && !checkinFilterDropdownRef.current.contains(target)) {
         setCheckinFilterDropdownOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [filterDropdownOpen, checkinFilterDropdownOpen]);
+
   useEffect(() => {
     function handleScroll() {
       setOpenMenuId(null);
@@ -488,10 +443,9 @@ export function AppointmentsClient({
     window.addEventListener("scroll", handleScroll, true);
     return () => window.removeEventListener("scroll", handleScroll, true);
   }, []);
+
   useEffect(() => {
-    if (checkinFilter === "done") {
-      setShowCompleted(true);
-    }
+    if (checkinFilter === "done") setShowCompleted(true);
   }, [checkinFilter]);
 
   useEffect(() => {
@@ -518,10 +472,9 @@ export function AppointmentsClient({
       }
     `;
     document.head.appendChild(style);
-    return () => {
-      document.getElementById("appointments-print-styles")?.remove();
-    };
+    return () => { document.getElementById("appointments-print-styles")?.remove(); };
   }, []);
+
   async function handleCheckin(appointmentId: string, patientName: string) {
     setActionLoading(appointmentId);
     try {
@@ -573,37 +526,24 @@ export function AppointmentsClient({
         credentials: "include",
         body: JSON.stringify({ status }),
       });
-
       if (!res.ok) {
         const text = await res.text();
         console.error("Status update failed:", text);
         setToast({ message: "Failed to update status", type: "error" });
         return;
       }
-
-      const data = (await res.json()) as {
-        invoice_created?: boolean;
-        invoice_id?: string;
-      };
+      const data = (await res.json()) as { invoice_created?: boolean; invoice_id?: string };
       if (status === "done" && (data.invoice_created || data.invoice_id)) {
         window.dispatchEvent(new Event("billing:invoice-from-appointment"));
       }
       if (status === "done") {
         const invoiceId = data.invoice_id as string | undefined;
         setToast({
-          message: data.invoice_created
-            ? "✅ Invoice created automatically"
-            : "✅ Appointment completed",
+          message: data.invoice_created ? "✅ Invoice created automatically" : "✅ Appointment completed",
           type: "success",
-          link: invoiceId
-            ? {
-                label: "View Invoice →",
-                href: `/${locale}/billing/${invoiceId}`,
-              }
-            : undefined,
+          link: invoiceId ? { label: "View Invoice →", href: `/${locale}/billing/${invoiceId}` } : undefined,
         });
       }
-
       setUndoState({
         appointmentId,
         checkinId,
@@ -613,7 +553,6 @@ export function AppointmentsClient({
         action: status === "in_chair" ? "Call In" : "Done",
         expiresAt: Date.now() + 5000,
       });
-
       refreshAll();
     } catch (e) {
       console.error("Status update error:", e);
@@ -622,16 +561,14 @@ export function AppointmentsClient({
       setActionLoading(null);
     }
   }
+
   async function handleUndo() {
     if (!undoState) return;
     const currentUndo = undoState;
     setUndoState(null);
     try {
       if (currentUndo.previousStatus === null) {
-        await fetch(`/api/reception/checkin/${currentUndo.checkinId}`, {
-          method: "DELETE",
-          credentials: "include",
-        });
+        await fetch(`/api/reception/checkin/${currentUndo.checkinId}`, { method: "DELETE", credentials: "include" });
       } else {
         await fetch(`/api/reception/checkin/${currentUndo.checkinId}`, {
           method: "PATCH",
@@ -646,6 +583,7 @@ export function AppointmentsClient({
       setToast({ message: "Failed to undo action", type: "error" });
     }
   }
+
   async function handleNoShow(appointmentId: string, patientName: string) {
     setActionLoading(appointmentId);
     try {
@@ -661,10 +599,7 @@ export function AppointmentsClient({
         setToast({ message: "Failed to mark no-show", type: "error" });
         return;
       }
-      setToast({
-        message: `✅ Marked ${patientName} as no-show`,
-        type: "success",
-      });
+      setToast({ message: `✅ Marked ${patientName} as no-show`, type: "success" });
       refreshAll();
     } catch (e) {
       console.error("No-show update error:", e);
@@ -673,6 +608,7 @@ export function AppointmentsClient({
       setActionLoading(null);
     }
   }
+
   async function handleCancel(appointmentId: string, patientName: string) {
     setCancelLoading(true);
     try {
@@ -686,10 +622,7 @@ export function AppointmentsClient({
         setToast({ message: "Failed to cancel appointment", type: "error" });
         return;
       }
-      setToast({
-        message: `Appointment for ${patientName} canceled`,
-        type: "success",
-      });
+      setToast({ message: `Appointment for ${patientName} canceled`, type: "success" });
       refreshAll();
     } catch {
       setToast({ message: "Network error", type: "error" });
@@ -703,66 +636,43 @@ export function AppointmentsClient({
     setFileLoading(true);
     setFilePatientName(name);
     setPatientFile(null);
-    const res = await fetch(`/api/reception/patient-file/${patientId}`, {
-      credentials: "include",
-    });
+    const res = await fetch(`/api/reception/patient-file/${patientId}`, { credentials: "include" });
     if (res.ok) setPatientFile((await res.json()) as PatientFile);
     setFileLoading(false);
   }
 
   function handlePrint() {
     setPrinting(true);
-    setTimeout(() => {
-      window.print();
-      setPrinting(false);
-    }, 300);
+    setTimeout(() => { window.print(); setPrinting(false); }, 300);
   }
 
   const headerDate = new Date().toLocaleDateString(locale, {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
+    weekday: "long", year: "numeric", month: "long", day: "numeric",
   });
+
   function renderQueueItem(item: QueueAppointment) {
     const status = item.checkin_status;
     const style = status ? CHECKIN_STYLES[status] : null;
     const patientName = `${item.first_name} ${item.last_name}`;
-    const isLoading =
-      actionLoading !== null &&
-      (actionLoading === item.appointment_id || actionLoading === item.checkin_id);
-    const apptTime = new Date(item.start_time).toLocaleTimeString(locale, {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
+    const isLoading = actionLoading !== null && (actionLoading === item.appointment_id || actionLoading === item.checkin_id);
+    const apptTime = new Date(item.start_time).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit", hour12: true });
     const isToday = new Date(item.start_time).toDateString() === new Date().toDateString();
     const isCheckedIn = Boolean(item.checkin_id);
     const quickActionType =
-      isToday && !isCheckedIn
-        ? "checkin"
-        : isToday && status === "waiting"
-          ? "callin"
-          : isToday && status === "in_chair"
-            ? "done"
-            : null;
+      isToday && !isCheckedIn ? "checkin"
+      : isToday && status === "waiting" ? "callin"
+      : isToday && status === "in_chair" ? "done"
+      : null;
     const isLate = !isCheckedIn && isToday && new Date(item.start_time) < new Date();
     const age = item.date_of_birth
-      ? Math.floor(
-          (Date.now() - new Date(item.date_of_birth).getTime()) /
-            (365.25 * 24 * 60 * 60 * 1000)
-        )
+      ? Math.floor((Date.now() - new Date(item.date_of_birth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
       : null;
 
     return (
       <div key={item.appointment_id} className="px-4 py-3 border-b hover:bg-muted/20 transition-colors">
         <div className="flex gap-3">
           <div className="shrink-0 w-14 self-center text-right">
-            <p
-              className={`text-xs font-bold font-mono ${
-                isLate ? "text-red-500" : "text-foreground"
-              }`}
-            >
+            <p className={`text-xs font-bold font-mono ${isLate ? "text-red-500" : "text-foreground"}`}>
               {apptTime}
             </p>
             {isLate && <p className="text-[10px] text-red-400">Late</p>}
@@ -775,17 +685,19 @@ export function AppointmentsClient({
 
           <div className="flex-1 min-w-0 space-y-1">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <p className="text-sm font-semibold">
-                {item.first_name} {item.last_name}
-              </p>
+              <p className="text-sm font-semibold">{item.first_name} {item.last_name}</p>
               {age != null && <span className="text-xs text-muted-foreground">{age}y</span>}
               {style && (
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${style.bg} ${style.text}`}
-                >
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${style.bg} ${style.text}`}>
                   {style.label}
                 </span>
               )}
+              <RiskBadge
+                score={item.risk_score}
+                patientPhone={item.phone}
+                patientName={patientName}
+                patientId={item.patient_id}
+              />
 
               {quickActionType === "checkin" && (
                 <button
@@ -793,57 +705,27 @@ export function AppointmentsClient({
                   disabled={isLoading}
                   className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-primary text-primary-foreground px-2 py-0.5 text-[10px] font-medium hover:opacity-90 disabled:opacity-50"
                 >
-                  {isLoading ? (
-                    <Loader2 className="size-3 animate-spin" />
-                  ) : (
-                    <UserCheck className="size-3" />
-                  )}
+                  {isLoading ? <Loader2 className="size-3 animate-spin" /> : <UserCheck className="size-3" />}
                   Check In
                 </button>
               )}
               {quickActionType === "callin" && (
                 <button
-                  onClick={() =>
-                    item.checkin_id &&
-                    updateStatus(
-                      item.checkin_id,
-                      "in_chair",
-                      item.appointment_id,
-                      patientName,
-                      "waiting"
-                    )
-                  }
+                  onClick={() => item.checkin_id && updateStatus(item.checkin_id, "in_chair", item.appointment_id, patientName, "waiting")}
                   disabled={isLoading}
                   className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-blue-600 text-white px-2 py-0.5 text-[10px] font-medium hover:bg-blue-700 disabled:opacity-50"
                 >
-                  {isLoading ? (
-                    <Loader2 className="size-3 animate-spin" />
-                  ) : (
-                    <Stethoscope className="size-3" />
-                  )}
+                  {isLoading ? <Loader2 className="size-3 animate-spin" /> : <Stethoscope className="size-3" />}
                   Call In
                 </button>
               )}
               {quickActionType === "done" && (
                 <button
-                  onClick={() =>
-                    item.checkin_id &&
-                    updateStatus(
-                      item.checkin_id,
-                      "done",
-                      item.appointment_id,
-                      patientName,
-                      "in_chair"
-                    )
-                  }
+                  onClick={() => item.checkin_id && updateStatus(item.checkin_id, "done", item.appointment_id, patientName, "in_chair")}
                   disabled={isLoading}
                   className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-green-600 text-white px-2 py-0.5 text-[10px] font-medium hover:bg-green-700 disabled:opacity-50"
                 >
-                  {isLoading ? (
-                    <Loader2 className="size-3 animate-spin" />
-                  ) : (
-                    <CheckCircle className="size-3" />
-                  )}
+                  {isLoading ? <Loader2 className="size-3 animate-spin" /> : <CheckCircle className="size-3" />}
                   Done
                 </button>
               )}
@@ -863,10 +745,7 @@ export function AppointmentsClient({
                       const menuHeight = 220;
                       const spaceBelow = window.innerHeight - rect.bottom;
                       const openUpward = spaceBelow < menuHeight;
-                      setMenuPosition({
-                        top: openUpward ? rect.top - menuHeight : rect.bottom + 4,
-                        right: window.innerWidth - rect.right,
-                      });
+                      setMenuPosition({ top: openUpward ? rect.top - menuHeight : rect.bottom + 4, right: window.innerWidth - rect.right });
                       setOpenMenuId(item.appointment_id);
                     }
                   }}
@@ -878,10 +757,7 @@ export function AppointmentsClient({
                 {openMenuId === item.appointment_id && menuPosition && (
                   <div
                     className="fixed z-[9999] w-44 rounded-xl border bg-white shadow-xl py-1 animate-in fade-in-0 zoom-in-95 duration-100"
-                    style={{
-                      top: menuPosition.top,
-                      right: menuPosition.right,
-                    }}
+                    style={{ top: menuPosition.top, right: menuPosition.right }}
                   >
                     {isToday &&
                       item.checkin_status !== "done" &&
@@ -890,18 +766,10 @@ export function AppointmentsClient({
                       item.appointment_status !== "canceled" &&
                       item.appointment_status !== "completed" && (
                         <button
-                          onClick={() => {
-                            handleNoShow(item.appointment_id, patientName);
-                            setOpenMenuId(null);
-                            setMenuPosition(null);
-                          }}
+                          onClick={() => { handleNoShow(item.appointment_id, patientName); setOpenMenuId(null); setMenuPosition(null); }}
                           className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted transition-colors text-left text-red-600"
                         >
-                          {isLoading ? (
-                            <Loader2 className="size-3.5 animate-spin" />
-                          ) : (
-                            <AlertCircle className="size-3.5" />
-                          )}
+                          {isLoading ? <Loader2 className="size-3.5 animate-spin" /> : <AlertCircle className="size-3.5" />}
                           No Show
                         </button>
                       )}
@@ -910,11 +778,7 @@ export function AppointmentsClient({
                       <>
                         <div className="h-px bg-border mx-2 my-1" />
                         <button
-                          onClick={() => {
-                            handleUndo();
-                            setOpenMenuId(null);
-                            setMenuPosition(null);
-                          }}
+                          onClick={() => { handleUndo(); setOpenMenuId(null); setMenuPosition(null); }}
                           className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted transition-colors text-left text-orange-600"
                         >
                           <Undo2 className="size-3.5" />
@@ -926,13 +790,7 @@ export function AppointmentsClient({
                     <div className="h-px bg-border mx-2 my-1" />
 
                     <button
-                      onClick={() => {
-                        setRescheduleTarget(item);
-                        setFormSlot(null);
-                        setShowNewAppointmentForm(true);
-                        setOpenMenuId(null);
-                        setMenuPosition(null);
-                      }}
+                      onClick={() => { setRescheduleTarget(item); setFormSlot(null); setShowNewAppointmentForm(true); setOpenMenuId(null); setMenuPosition(null); }}
                       className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted transition-colors text-left text-muted-foreground"
                     >
                       <Calendar className="size-3.5" />
@@ -940,11 +798,7 @@ export function AppointmentsClient({
                     </button>
 
                     <button
-                      onClick={() => {
-                        openPatientFile(item.patient_id, patientName);
-                        setOpenMenuId(null);
-                        setMenuPosition(null);
-                      }}
+                      onClick={() => { openPatientFile(item.patient_id, patientName); setOpenMenuId(null); setMenuPosition(null); }}
                       className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted transition-colors text-left text-muted-foreground"
                     >
                       <FileText className="size-3.5" />
@@ -952,11 +806,7 @@ export function AppointmentsClient({
                     </button>
 
                     <button
-                      onClick={() => {
-                        router.push(`/${locale}/patients/${item.patient_id}`);
-                        setOpenMenuId(null);
-                        setMenuPosition(null);
-                      }}
+                      onClick={() => { router.push(`/${locale}/patients/${item.patient_id}`); setOpenMenuId(null); setMenuPosition(null); }}
                       className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted transition-colors text-left text-muted-foreground"
                     >
                       <ChevronRight className="size-3.5" />
@@ -967,11 +817,7 @@ export function AppointmentsClient({
                       <>
                         <div className="h-px bg-border mx-2 my-1" />
                         <button
-                          onClick={() => {
-                            setCancelTarget(item);
-                            setOpenMenuId(null);
-                            setMenuPosition(null);
-                          }}
+                          onClick={() => { setCancelTarget(item); setOpenMenuId(null); setMenuPosition(null); }}
                           className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-red-50 transition-colors text-left text-red-600"
                         >
                           <X className="size-3.5" />
@@ -989,10 +835,7 @@ export function AppointmentsClient({
             </p>
 
             {item.phone && (
-              <a
-                href={`tel:${item.phone}`}
-                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-              >
+              <a href={`tel:${item.phone}`} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
                 <Phone className="size-3" />
                 {item.phone}
               </a>
@@ -1014,19 +857,12 @@ export function AppointmentsClient({
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={refreshAll}
-              className="flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm hover:bg-muted"
-            >
+            <button onClick={refreshAll} className="flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm hover:bg-muted">
               <RefreshCw className="size-4" />
               Refresh
             </button>
             <button
-              onClick={() => {
-                setRescheduleTarget(null);
-                setFormSlot({ date: selectedDate });
-                setShowNewAppointmentForm(true);
-              }}
+              onClick={() => { setRescheduleTarget(null); setFormSlot({ date: selectedDate }); setShowNewAppointmentForm(true); }}
               className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm text-white hover:opacity-90"
             >
               <Plus className="size-4" />
@@ -1036,17 +872,11 @@ export function AppointmentsClient({
         </div>
 
         <div className="mt-4 flex items-start gap-4 min-h-0">
-          <aside
-            className="sticky top-4 w-80 shrink-0 self-start flex flex-col gap-4"
-            style={{ height: "calc(100vh - 120px)" }}
-          >
+          <aside className="sticky top-4 w-80 shrink-0 self-start flex flex-col gap-4" style={{ height: "calc(100vh - 120px)" }}>
             <div className="shrink-0 flex flex-col gap-3">
               <MiniCalendar
                 selectedDate={selectedDate}
-                onSelectDate={(d) => {
-                  setSelectedDate(d);
-                  setViewMode("day");
-                }}
+                onSelectDate={(d) => { setSelectedDate(d); setViewMode("day"); }}
                 appointments={filteredAppointments}
                 locale={locale}
               />
@@ -1058,83 +888,32 @@ export function AppointmentsClient({
                       ? "border-primary bg-primary/10 text-primary"
                       : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
                   }`}
-                  title="Filter queue by status"
                 >
                   <Filter className="size-4" />
-                  {checkinFilter === "all"
-                    ? "All"
-                    : checkinFilter === "not_checked_in"
-                      ? "Not Checked In"
-                      : checkinFilter === "waiting"
-                        ? "Waiting"
-                        : checkinFilter === "in_chair"
-                          ? "In Chair"
-                          : "Done"}
+                  {checkinFilter === "all" ? "All"
+                    : checkinFilter === "not_checked_in" ? "Not Checked In"
+                    : checkinFilter === "waiting" ? "Waiting"
+                    : checkinFilter === "in_chair" ? "In Chair"
+                    : "Done"}
                 </button>
                 {checkinFilterDropdownOpen && (
                   <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-xl border border-border bg-card p-2 shadow-lg">
                     {[
-                      {
-                        label: "All",
-                        filter: "all" as const,
-                        icon: Calendar,
-                        color: "text-muted-foreground",
-                      },
-                      {
-                        label: "Not Checked In",
-                        filter: "not_checked_in" as const,
-                        subLabel: `(${notCheckedIn})`,
-                        icon: AlertCircle,
-                        color: "text-orange-500",
-                      },
-                      {
-                        label: "Waiting",
-                        filter: "waiting" as const,
-                        subLabel: `(${waitingCount})`,
-                        icon: Clock,
-                        color: "text-yellow-500",
-                      },
-                      {
-                        label: "In Chair",
-                        filter: "in_chair" as const,
-                        subLabel: `(${inChairCount})`,
-                        icon: Stethoscope,
-                        color: "text-blue-500",
-                      },
-                      {
-                        label: "Done",
-                        filter: "done" as const,
-                        subLabel: `(${doneCount})`,
-                        icon: CheckCircle,
-                        color: "text-green-500",
-                      },
+                      { label: "All", filter: "all" as const, icon: Calendar, color: "text-muted-foreground" },
+                      { label: "Not Checked In", filter: "not_checked_in" as const, subLabel: `(${notCheckedIn})`, icon: AlertCircle, color: "text-orange-500" },
+                      { label: "Waiting", filter: "waiting" as const, subLabel: `(${waitingCount})`, icon: Clock, color: "text-yellow-500" },
+                      { label: "In Chair", filter: "in_chair" as const, subLabel: `(${inChairCount})`, icon: Stethoscope, color: "text-blue-500" },
+                      { label: "Done", filter: "done" as const, subLabel: `(${doneCount})`, icon: CheckCircle, color: "text-green-500" },
                     ].map(({ label, filter, subLabel, icon: Icon, color }) => {
-                      const isAllOption = label === "All";
-                      const active =
-                        isAllOption
-                          ? checkinFilter === "all"
-                          : checkinFilter === filter;
+                      const active = label === "All" ? checkinFilter === "all" : checkinFilter === filter;
                       return (
                         <button
                           key={label}
-                          onClick={() => {
-                            setCheckinFilter(filter);
-                            setCheckinFilterDropdownOpen(false);
-                          }}
-                          className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50 ${
-                            active ? "bg-primary/10 text-primary" : ""
-                          }`}
+                          onClick={() => { setCheckinFilter(filter); setCheckinFilterDropdownOpen(false); }}
+                          className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50 ${active ? "bg-primary/10 text-primary" : ""}`}
                         >
                           <Icon className={`size-4 shrink-0 ${color}`} />
-                          <span>
-                            {label}
-                            {subLabel && (
-                              <span className="text-muted-foreground">
-                                {" "}
-                                {subLabel}
-                              </span>
-                            )}
-                          </span>
+                          <span>{label}{subLabel && <span className="text-muted-foreground"> {subLabel}</span>}</span>
                         </button>
                       );
                     })}
@@ -1143,94 +922,52 @@ export function AppointmentsClient({
               </div>
             </div>
 
-            <div className="flex-1 rounded-xl border bg-card flex flex-col"
-            style={{ minHeight: "320px" }}>
+            <div className="flex-1 rounded-xl border bg-card flex flex-col" style={{ minHeight: "320px" }}>
               <div className="shrink-0 border-b px-4 py-3 bg-muted/30">
                 <h2 className="text-sm font-semibold">
                   {selectedDate.toDateString() === new Date().toDateString()
                     ? "Today's Queue"
-                    : selectedDate.toLocaleDateString(locale, {
-                        weekday: "long",
-                        month: "short",
-                        day: "numeric",
-                      })}
+                    : selectedDate.toLocaleDateString(locale, { weekday: "long", month: "short", day: "numeric" })}
                 </h2>
                 <p className="text-xs text-muted-foreground">
-                  {selectedDate.toLocaleDateString(locale, {
-                    weekday: "long",
-                    month: "short",
-                    day: "numeric",
-                  })}{" "}
-                  · {filteredQueue.length} appointments
+                  {selectedDate.toLocaleDateString(locale, { weekday: "long", month: "short", day: "numeric" })} · {filteredQueue.length} appointments
                 </p>
               </div>
-              <div
-                className="flex-1 overflow-y-auto sidebar-scroll"
-                style={{ minHeight: "260px" }}
-              >
+              <div className="flex-1 overflow-y-auto sidebar-scroll" style={{ minHeight: "260px" }}>
                 {loading ? (
                   <div className="p-4 space-y-2 animate-pulse">
                     <div className="h-16 rounded bg-muted" />
                     <div className="h-16 rounded bg-muted" />
                     <div className="h-16 rounded bg-muted" />
                   </div>
-                ) : activeQueue.length === 0 &&
-                  completedQueue.length === 0 &&
-                  canceledQueue.length === 0 &&
-                  noShowQueue.length === 0 ? (
-                  <div className="p-6 text-center text-muted-foreground text-sm">
-                    No appointments for this filter.
-                  </div>
+                ) : activeQueue.length === 0 && completedQueue.length === 0 && canceledQueue.length === 0 && noShowQueue.length === 0 ? (
+                  <div className="p-6 text-center text-muted-foreground text-sm">No appointments for this filter.</div>
                 ) : (
                   <div>
                     {activeQueue.map((item) => renderQueueItem(item))}
 
                     {completedQueue.length > 0 && (
                       <div className="border-t">
-                        <button
-                          onClick={() => setShowCompleted((v) => !v)}
-                          className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors text-left"
-                        >
+                        <button onClick={() => setShowCompleted((v) => !v)} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors text-left">
                           <div className="flex items-center gap-2">
                             <CheckCircle className="size-3.5 text-green-500" />
-                            <span className="text-xs font-medium text-muted-foreground">
-                              Completed ({completedQueue.length})
-                            </span>
+                            <span className="text-xs font-medium text-muted-foreground">Completed ({completedQueue.length})</span>
                           </div>
-                          <ChevronDown
-                            className={`size-3.5 text-muted-foreground transition-transform duration-200 ${
-                              showCompleted ? "rotate-180" : ""
-                            }`}
-                          />
+                          <ChevronDown className={`size-3.5 text-muted-foreground transition-transform duration-200 ${showCompleted ? "rotate-180" : ""}`} />
                         </button>
-
-                        {showCompleted && (
-                          <div className="border-t divide-y bg-muted/10">
-                            {completedQueue.map((item) => renderQueueItem(item))}
-                          </div>
-                        )}
+                        {showCompleted && <div className="border-t divide-y bg-muted/10">{completedQueue.map((item) => renderQueueItem(item))}</div>}
                       </div>
                     )}
 
                     {canceledQueue.length > 0 && (
                       <div className="border-t">
-                        <button
-                          onClick={() => setShowCanceled((v) => !v)}
-                          className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors text-left"
-                        >
+                        <button onClick={() => setShowCanceled((v) => !v)} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors text-left">
                           <div className="flex items-center gap-2">
                             <X className="size-3.5 text-muted-foreground/50" />
-                            <span className="text-xs font-medium text-muted-foreground/70">
-                              Canceled ({canceledQueue.length})
-                            </span>
+                            <span className="text-xs font-medium text-muted-foreground/70">Canceled ({canceledQueue.length})</span>
                           </div>
-                          <ChevronDown
-                            className={`size-3.5 text-muted-foreground/50 transition-transform duration-200 ${
-                              showCanceled ? "rotate-180" : ""
-                            }`}
-                          />
+                          <ChevronDown className={`size-3.5 text-muted-foreground/50 transition-transform duration-200 ${showCanceled ? "rotate-180" : ""}`} />
                         </button>
-
                         {showCanceled && (
                           <div className="border-t divide-y bg-muted/5">
                             {canceledQueue.map((item) => (
@@ -1238,28 +975,15 @@ export function AppointmentsClient({
                                 <div className="flex items-center gap-3">
                                   <div className="w-14 shrink-0 text-center">
                                     <p className="text-xs font-mono text-muted-foreground">
-                                      {new Date(item.start_time).toLocaleTimeString(locale, {
-                                        hour: "numeric",
-                                        minute: "2-digit",
-                                        hour12: true,
-                                      })}
+                                      {new Date(item.start_time).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit", hour12: true })}
                                     </p>
                                   </div>
-
                                   <div className="w-0.5 h-8 rounded-full shrink-0 bg-muted-foreground/30" />
-
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-muted-foreground truncate line-through">
-                                      {item.first_name} {item.last_name}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground/60 truncate">
-                                      {item.service_name} · {item.provider_name}
-                                    </p>
+                                    <p className="text-sm font-medium text-muted-foreground truncate line-through">{item.first_name} {item.last_name}</p>
+                                    <p className="text-xs text-muted-foreground/60 truncate">{item.service_name} · {item.provider_name}</p>
                                   </div>
-
-                                  <span className="text-[10px] font-medium text-muted-foreground/60 shrink-0 border border-border/40 rounded-full px-2 py-0.5">
-                                    Canceled
-                                  </span>
+                                  <span className="text-[10px] font-medium text-muted-foreground/60 shrink-0 border border-border/40 rounded-full px-2 py-0.5">Canceled</span>
                                 </div>
                               </div>
                             ))}
@@ -1270,103 +994,65 @@ export function AppointmentsClient({
 
                     {noShowQueue.length > 0 && (
                       <div className="border-t">
-                        <button
-                          onClick={() => setShowNoShow((v) => !v)}
-                          className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors text-left"
-                        >
+                        <button onClick={() => setShowNoShow((v) => !v)} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors text-left">
                           <div className="flex items-center gap-2">
                             <AlertCircle className="size-3.5 text-red-500" />
-                            <span className="text-xs font-medium text-muted-foreground">
-                              No Show ({noShowQueue.length})
-                            </span>
+                            <span className="text-xs font-medium text-muted-foreground">No Show ({noShowQueue.length})</span>
                           </div>
-                          <ChevronDown
-                            className={`size-3.5 text-muted-foreground transition-transform duration-200 ${
-                              showNoShow ? "rotate-180" : ""
-                            }`}
-                          />
+                          <ChevronDown className={`size-3.5 text-muted-foreground transition-transform duration-200 ${showNoShow ? "rotate-180" : ""}`} />
                         </button>
-
-                        {showNoShow && (
-                          <div className="border-t divide-y bg-muted/10">
-                            {noShowQueue.map((item) => renderQueueItem(item))}
-                          </div>
-                        )}
+                        {showNoShow && <div className="border-t divide-y bg-muted/10">{noShowQueue.map((item) => renderQueueItem(item))}</div>}
                       </div>
                     )}
                   </div>
                 )}
               </div>
             </div>
-
           </aside>
 
           <section className="min-w-0 flex-1">
             <div className="mb-3 flex items-center justify-end gap-2">
-                <div className="flex h-9 items-center gap-1 rounded-xl border border-border bg-card p-1">
-                  <button
-                    onClick={() => setViewMode("day")}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                      viewMode === "day"
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                    }`}
-                  >
-                    Day
-                  </button>
-                  <button
-                    onClick={() => setViewMode("week")}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                      viewMode === "week"
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                    }`}
-                  >
-                    Week
-                  </button>
-                </div>
+              <div className="flex h-9 items-center gap-1 rounded-xl border border-border bg-card p-1">
+                <button
+                  onClick={() => setViewMode("day")}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "day" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+                >
+                  Day
+                </button>
+                <button
+                  onClick={() => setViewMode("week")}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "week" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+                >
+                  Week
+                </button>
+              </div>
 
-                <div className="relative" ref={filterDropdownRef}>
-                  <button
-                    onClick={() => setFilterDropdownOpen((v) => !v)}
-                    className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-colors ${
-                      selectedProviderId !== "all"
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
-                    }`}
-                    title="Filter by provider"
-                  >
-                    <Filter className="size-4" />
-                  </button>
-                  {filterDropdownOpen && (
-                    <div className="absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-xl border border-border bg-card p-2 shadow-lg">
-                      <p className="mb-2 px-2 text-xs font-medium text-muted-foreground">
-                        Provider
-                      </p>
-                      <select
-                        value={selectedProviderId}
-                        onChange={(e) => {
-                          setSelectedProviderId(e.target.value);
-                          setFilterDropdownOpen(false);
-                        }}
-                        className="h-9 w-full rounded-lg border border-border bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      >
-                        <option value="all">All Providers</option>
-                        {providers.map((p) => (
-                          <option
-                            key={String(p.id ?? "")}
-                            value={String(p.id ?? "")}
-                          >
-                            {(p.user as Record<string, string> | undefined)
-                              ?.full_name ??
-                              (p.full_name as string) ??
-                              "Provider"}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                </div>
+              <div className="relative" ref={filterDropdownRef}>
+                <button
+                  onClick={() => setFilterDropdownOpen((v) => !v)}
+                  className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-colors ${selectedProviderId !== "all" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+                  title="Filter by provider"
+                >
+                  <Filter className="size-4" />
+                </button>
+                {filterDropdownOpen && (
+                  <div className="absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-xl border border-border bg-card p-2 shadow-lg">
+                    <p className="mb-2 px-2 text-xs font-medium text-muted-foreground">Provider</p>
+                    <select
+                      value={selectedProviderId}
+                      onChange={(e) => { setSelectedProviderId(e.target.value); setFilterDropdownOpen(false); }}
+                      className="h-9 w-full rounded-lg border border-border bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    >
+                      <option value="all">All Providers</option>
+                      {providers.map((p) => (
+                        <option key={String(p.id ?? "")} value={String(p.id ?? "")}>
+                          {(p.user as Record<string, string> | undefined)?.full_name ?? (p.full_name as string) ?? "Provider"}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="relative flex gap-4" style={{ height: "calc(100vh - 220px)", minHeight: "640px" }}>
@@ -1386,14 +1072,8 @@ export function AppointmentsClient({
                     checkinStatuses={checkinStatuses}
                     workingHours={currentDayWorkingHours}
                     selectedAppointmentId={selectedAppointment?.id as string | undefined}
-                    onSlotClick={(slotDate, providerId) => {
-                      setFormSlot({ date: slotDate, providerId });
-                      setShowNewAppointmentForm(true);
-                      setSelectedAppointment(null);
-                    }}
-                    onAppointmentClick={(appt) => {
-                      setSelectedAppointment(appt);
-                    }}
+                    onSlotClick={(slotDate, providerId) => { setFormSlot({ date: slotDate, providerId }); setShowNewAppointmentForm(true); setSelectedAppointment(null); }}
+                    onAppointmentClick={(appt) => { setSelectedAppointment(appt); }}
                     locale={locale}
                   />
                 ) : (
@@ -1401,10 +1081,7 @@ export function AppointmentsClient({
                     weekStart={getMondayOfWeek(selectedDate)}
                     appointments={filteredAppointments}
                     selectedDate={selectedDate}
-                    onSelectDate={(d) => {
-                      setSelectedDate(d);
-                      setViewMode("day");
-                    }}
+                    onSelectDate={(d) => { setSelectedDate(d); setViewMode("day"); }}
                     onAppointmentClick={(appt) => setSelectedAppointment(appt)}
                     locale={locale}
                   />
@@ -1412,21 +1089,13 @@ export function AppointmentsClient({
               </div>
 
               {selectedAppointment && (
-                <div
-                  className="fixed inset-y-0 right-0 z-50 w-72 p-2 md:static md:inset-auto md:z-auto md:w-72 md:p-0 md:shrink-0"
-                >
+                <div className="fixed inset-y-0 right-0 z-50 w-72 p-2 md:static md:inset-auto md:z-auto md:w-72 md:p-0 md:shrink-0">
                   <AppointmentPanel
                     appointment={selectedAppointment}
                     locale={locale}
                     onClose={() => setSelectedAppointment(null)}
-                    onStatusChange={(updated) => {
-                      setSelectedAppointment(updated);
-                      refreshAll();
-                    }}
-                    onNewAppointment={() => {
-                      setFormSlot({ date: selectedDate });
-                      setShowNewAppointmentForm(true);
-                    }}
+                    onStatusChange={(updated) => { setSelectedAppointment(updated); refreshAll(); }}
+                    onNewAppointment={() => { setFormSlot({ date: selectedDate }); setShowNewAppointmentForm(true); }}
                   />
                 </div>
               )}
@@ -1437,43 +1106,21 @@ export function AppointmentsClient({
 
       {showNewAppointmentForm && (
         <AppointmentFormDrawer
-          initialDate={
-            rescheduleTarget
-              ? new Date(rescheduleTarget.start_time)
-              : (formSlot?.date ?? selectedDate)
-          }
+          initialDate={rescheduleTarget ? new Date(rescheduleTarget.start_time) : (formSlot?.date ?? selectedDate)}
           initialProviderId={rescheduleTarget?.provider_id ?? formSlot?.providerId}
           initialPatientId={rescheduleTarget?.patient_id}
-          initialPatientName={
-            rescheduleTarget
-              ? `${rescheduleTarget.first_name} ${rescheduleTarget.last_name}`
-              : undefined
-          }
+          initialPatientName={rescheduleTarget ? `${rescheduleTarget.first_name} ${rescheduleTarget.last_name}` : undefined}
           editingAppointment={
             rescheduleTarget
-              ? {
-                  id: rescheduleTarget.appointment_id,
-                  start_time: rescheduleTarget.start_time,
-                  end_time: rescheduleTarget.end_time,
-                  provider_id: rescheduleTarget.provider_id,
-                  notes: rescheduleTarget.notes ?? null,
-                }
+              ? { id: rescheduleTarget.appointment_id, start_time: rescheduleTarget.start_time, end_time: rescheduleTarget.end_time, provider_id: rescheduleTarget.provider_id, notes: rescheduleTarget.notes ?? null }
               : null
           }
           providers={providers}
-          onClose={() => {
-            setShowNewAppointmentForm(false);
-            setRescheduleTarget(null);
-          }}
+          onClose={() => { setShowNewAppointmentForm(false); setRescheduleTarget(null); }}
           onSuccess={() => {
             setShowNewAppointmentForm(false);
             refreshAll();
-            setToast({
-              message: rescheduleTarget
-                ? "✅ Appointment rescheduled"
-                : "✅ Appointment created",
-              type: "success",
-            });
+            setToast({ message: rescheduleTarget ? "✅ Appointment rescheduled" : "✅ Appointment created", type: "success" });
             setRescheduleTarget(null);
           }}
         />
@@ -1481,10 +1128,7 @@ export function AppointmentsClient({
 
       {(patientFile || fileLoading) && (
         <>
-          <div
-            className="fixed inset-0 z-50 bg-black/50"
-            onClick={() => !fileLoading && setPatientFile(null)}
-          />
+          <div className="fixed inset-0 z-50 bg-black/50" onClick={() => !fileLoading && setPatientFile(null)} />
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
             <div className="bg-card rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col pointer-events-auto">
               <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
@@ -1503,17 +1147,10 @@ export function AppointmentsClient({
                     disabled={printing || fileLoading}
                     className="flex items-center gap-1.5 bg-primary text-primary-foreground rounded-lg px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50"
                   >
-                    {printing ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Printer className="size-4" />
-                    )}
+                    {printing ? <Loader2 className="size-4 animate-spin" /> : <Printer className="size-4" />}
                     Print / PDF
                   </button>
-                  <button
-                    onClick={() => setPatientFile(null)}
-                    className="p-2 rounded-lg hover:bg-muted"
-                  >
+                  <button onClick={() => setPatientFile(null)} className="p-2 rounded-lg hover:bg-muted">
                     <X className="size-5" />
                   </button>
                 </div>
@@ -1527,41 +1164,15 @@ export function AppointmentsClient({
                 patientFile && (
                   <div className="flex-1 overflow-y-auto p-6 space-y-6" ref={printRef}>
                     <section>
-                      <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3">
-                        Patient Information
-                      </h3>
+                      <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3">Patient Information</h3>
                       <div className="grid grid-cols-3 gap-4 rounded-xl border p-4 bg-muted/20">
                         {[
-                          {
-                            label: "Full Name",
-                            value: `${String(
-                              patientFile.patient.first_name ?? ""
-                            )} ${String(patientFile.patient.last_name ?? "")}`.trim(),
-                          },
-                          {
-                            label: "Phone",
-                            value: String(patientFile.patient.phone ?? "—"),
-                          },
-                          {
-                            label: "Date of Birth",
-                            value: patientFile.patient.date_of_birth
-                              ? new Date(
-                                  patientFile.patient.date_of_birth as string
-                                ).toLocaleDateString()
-                              : "—",
-                          },
-                          {
-                            label: "Gender",
-                            value: (patientFile.patient.gender as string) || "—",
-                          },
-                          {
-                            label: "Email",
-                            value: (patientFile.patient.email as string) || "—",
-                          },
-                          {
-                            label: "Address",
-                            value: (patientFile.patient.address as string) || "—",
-                          },
+                          { label: "Full Name", value: `${String(patientFile.patient.first_name ?? "")} ${String(patientFile.patient.last_name ?? "")}`.trim() },
+                          { label: "Phone", value: String(patientFile.patient.phone ?? "—") },
+                          { label: "Date of Birth", value: patientFile.patient.date_of_birth ? new Date(patientFile.patient.date_of_birth as string).toLocaleDateString() : "—" },
+                          { label: "Gender", value: (patientFile.patient.gender as string) || "—" },
+                          { label: "Email", value: (patientFile.patient.email as string) || "—" },
+                          { label: "Address", value: (patientFile.patient.address as string) || "—" },
                         ].map(({ label, value }) => (
                           <div key={label}>
                             <p className="text-xs text-muted-foreground">{label}</p>
@@ -1573,59 +1184,22 @@ export function AppointmentsClient({
 
                     {patientFile.medical_history && (
                       <section>
-                        <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3">
-                          Medical History
-                        </h3>
+                        <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3">Medical History</h3>
                         <div className="rounded-xl border p-4 space-y-3">
-                          {(patientFile.medical_history.allergies as string[] | undefined)
-                            ?.length ? (
+                          {(patientFile.medical_history.allergies as string[] | undefined)?.length ? (
                             <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2">
-                              <p className="text-xs font-semibold text-red-700">
-                                ⚠️ Allergies
-                              </p>
-                              <p className="text-sm text-red-700 mt-0.5">
-                                {(
-                                  patientFile.medical_history.allergies as string[]
-                                ).join(", ")}
-                              </p>
+                              <p className="text-xs font-semibold text-red-700">⚠️ Allergies</p>
+                              <p className="text-sm text-red-700 mt-0.5">{(patientFile.medical_history.allergies as string[]).join(", ")}</p>
                             </div>
                           ) : null}
                           <div className="grid grid-cols-3 gap-3">
                             {[
-                              {
-                                label: "Blood Type",
-                                value:
-                                  (patientFile.medical_history.blood_type as string) ||
-                                  "Unknown",
-                              },
-                              {
-                                label: "Diabetic",
-                                value: patientFile.medical_history.diabetic
-                                  ? "Yes ⚠️"
-                                  : "No",
-                              },
-                              {
-                                label: "Hypertensive",
-                                value: patientFile.medical_history.hypertensive
-                                  ? "Yes ⚠️"
-                                  : "No",
-                              },
-                              {
-                                label: "Heart Condition",
-                                value: patientFile.medical_history.heart_condition
-                                  ? "Yes ⚠️"
-                                  : "No",
-                              },
-                              {
-                                label: "Smoker",
-                                value: patientFile.medical_history.smoking ? "Yes" : "No",
-                              },
-                              {
-                                label: "Pregnant",
-                                value: patientFile.medical_history.pregnant
-                                  ? "Yes ⚠️"
-                                  : "No",
-                              },
+                              { label: "Blood Type", value: (patientFile.medical_history.blood_type as string) || "Unknown" },
+                              { label: "Diabetic", value: patientFile.medical_history.diabetic ? "Yes ⚠️" : "No" },
+                              { label: "Hypertensive", value: patientFile.medical_history.hypertensive ? "Yes ⚠️" : "No" },
+                              { label: "Heart Condition", value: patientFile.medical_history.heart_condition ? "Yes ⚠️" : "No" },
+                              { label: "Smoker", value: patientFile.medical_history.smoking ? "Yes" : "No" },
+                              { label: "Pregnant", value: patientFile.medical_history.pregnant ? "Yes ⚠️" : "No" },
                             ].map(({ label, value }) => (
                               <div key={label}>
                                 <p className="text-xs text-muted-foreground">{label}</p>
@@ -1639,26 +1213,15 @@ export function AppointmentsClient({
 
                     {patientFile.dental_chart.length > 0 && (
                       <section>
-                        <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3">
-                          Dental Chart
-                        </h3>
+                        <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3">Dental Chart</h3>
                         <div className="rounded-xl border p-4">
                           <div className="flex flex-wrap gap-1.5">
                             {patientFile.dental_chart.map((tooth) => (
-                              <div
-                                key={tooth.tooth_number}
-                                className="flex flex-col items-center gap-0.5"
-                              >
-                                <span className="text-[9px] text-muted-foreground">
-                                  {tooth.tooth_number}
-                                </span>
+                              <div key={tooth.tooth_number} className="flex flex-col items-center gap-0.5">
+                                <span className="text-[9px] text-muted-foreground">{tooth.tooth_number}</span>
                                 <div
                                   className="h-6 w-5 rounded-sm border"
-                                  style={{
-                                    backgroundColor: tooth.conditions[0]
-                                      ? CONDITION_COLORS[tooth.conditions[0]] ?? "#e5e7eb"
-                                      : "#e5e7eb",
-                                  }}
+                                  style={{ backgroundColor: tooth.conditions[0] ? CONDITION_COLORS[tooth.conditions[0]] ?? "#e5e7eb" : "#e5e7eb" }}
                                   title={tooth.conditions.join(", ")}
                                 />
                               </div>
@@ -1670,17 +1233,11 @@ export function AppointmentsClient({
 
                     {patientFile.xrays.length > 0 && (
                       <section>
-                        <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3">
-                          X-Rays ({patientFile.xrays.length})
-                        </h3>
+                        <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3">X-Rays ({patientFile.xrays.length})</h3>
                         <div className="grid grid-cols-4 gap-2">
                           {patientFile.xrays.map((xray, i) => (
                             <div key={i} className="rounded-xl overflow-hidden border bg-black">
-                              <img
-                                src={xray.file_url}
-                                alt={xray.file_name}
-                                className="w-full h-20 object-cover opacity-90"
-                              />
+                              <img src={xray.file_url} alt={xray.file_name} className="w-full h-20 object-cover opacity-90" />
                             </div>
                           ))}
                         </div>
@@ -1688,43 +1245,24 @@ export function AppointmentsClient({
                     )}
 
                     <section>
-                      <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3">
-                        Visit History ({patientFile.appointments.length})
-                      </h3>
+                      <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3">Visit History ({patientFile.appointments.length})</h3>
                       <div className="rounded-xl border overflow-hidden">
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b bg-muted/50">
-                              <th className="px-3 py-2 text-start text-xs font-medium text-muted-foreground">
-                                Date
-                              </th>
-                              <th className="px-3 py-2 text-start text-xs font-medium text-muted-foreground">
-                                Service
-                              </th>
-                              <th className="px-3 py-2 text-start text-xs font-medium text-muted-foreground">
-                                Provider
-                              </th>
-                              <th className="px-3 py-2 text-start text-xs font-medium text-muted-foreground">
-                                Status
-                              </th>
+                              <th className="px-3 py-2 text-start text-xs font-medium text-muted-foreground">Date</th>
+                              <th className="px-3 py-2 text-start text-xs font-medium text-muted-foreground">Service</th>
+                              <th className="px-3 py-2 text-start text-xs font-medium text-muted-foreground">Provider</th>
+                              <th className="px-3 py-2 text-start text-xs font-medium text-muted-foreground">Status</th>
                             </tr>
                           </thead>
                           <tbody>
                             {patientFile.appointments.map((appt, i) => (
-                              <tr
-                                key={i}
-                                className="border-b last:border-0 hover:bg-muted/20"
-                              >
-                                <td className="px-3 py-2 text-xs">
-                                  {new Date(appt.start_time).toLocaleDateString()}
-                                </td>
-                                <td className="px-3 py-2 text-xs">
-                                  {appt.service_name || "—"}
-                                </td>
+                              <tr key={i} className="border-b last:border-0 hover:bg-muted/20">
+                                <td className="px-3 py-2 text-xs">{new Date(appt.start_time).toLocaleDateString()}</td>
+                                <td className="px-3 py-2 text-xs">{appt.service_name || "—"}</td>
                                 <td className="px-3 py-2 text-xs">{appt.provider_name}</td>
-                                <td className="px-3 py-2 text-xs capitalize">
-                                  {appt.status}
-                                </td>
+                                <td className="px-3 py-2 text-xs capitalize">{appt.status}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -1831,25 +1369,14 @@ export function AppointmentsClient({
       </div>
 
       {toast && (
-        <div
-          className={`fixed bottom-6 right-6 z-[100] flex items-center gap-3 rounded-2xl px-5 py-3.5 shadow-2xl text-sm font-medium animate-in slide-in-from-bottom-4 duration-300 ${
-            toast.type === "success" ? "bg-green-600 text-white" : "bg-red-600 text-white"
-          }`}
-        >
+        <div className={`fixed bottom-6 right-6 z-[100] flex items-center gap-3 rounded-2xl px-5 py-3.5 shadow-2xl text-sm font-medium animate-in slide-in-from-bottom-4 duration-300 ${toast.type === "success" ? "bg-green-600 text-white" : "bg-red-600 text-white"}`}>
           <span>{toast.message}</span>
           {toast.link && (
-            <a
-              href={toast.link.href}
-              className="shrink-0 rounded-lg bg-white/20 hover:bg-white/30 px-3 py-1 text-xs font-bold text-white transition-colors whitespace-nowrap"
-              onClick={() => setToast(null)}
-            >
+            <a href={toast.link.href} className="shrink-0 rounded-lg bg-white/20 hover:bg-white/30 px-3 py-1 text-xs font-bold text-white transition-colors whitespace-nowrap" onClick={() => setToast(null)}>
               {toast.link.label}
             </a>
           )}
-          <button
-            onClick={() => setToast(null)}
-            className="shrink-0 opacity-70 hover:opacity-100 transition-opacity"
-          >
+          <button onClick={() => setToast(null)} className="shrink-0 opacity-70 hover:opacity-100 transition-opacity">
             <X className="size-4" />
           </button>
         </div>
@@ -1857,52 +1384,30 @@ export function AppointmentsClient({
 
       {cancelTarget && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={() => !cancelLoading && setCancelTarget(null)}
-          />
-
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !cancelLoading && setCancelTarget(null)} />
           <div className="relative z-10 w-full max-w-sm rounded-2xl border bg-card shadow-2xl p-6 animate-in fade-in-0 zoom-in-95 duration-200">
             <div className="flex items-start gap-4">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100">
                 <X className="size-5 text-red-600" />
               </div>
-
               <div className="flex-1">
                 <h3 className="text-sm font-semibold text-foreground">Cancel Appointment</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Are you sure you want to cancel the appointment for{" "}
-                  <strong className="text-foreground">
-                    {cancelTarget.first_name} {cancelTarget.last_name}
-                  </strong>{" "}
+                  <strong className="text-foreground">{cancelTarget.first_name} {cancelTarget.last_name}</strong>{" "}
                   at{" "}
                   <strong className="text-foreground">
-                    {new Date(cancelTarget.start_time).toLocaleTimeString(locale, {
-                      hour: "numeric",
-                      minute: "2-digit",
-                      hour12: true,
-                    })}
-                  </strong>
-                  ? This cannot be undone.
+                    {new Date(cancelTarget.start_time).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit", hour12: true })}
+                  </strong>? This cannot be undone.
                 </p>
               </div>
             </div>
-
             <div className="mt-5 flex gap-2 justify-end">
-              <button
-                onClick={() => setCancelTarget(null)}
-                disabled={cancelLoading}
-                className="rounded-lg border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50"
-              >
+              <button onClick={() => setCancelTarget(null)} disabled={cancelLoading} className="rounded-lg border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50">
                 Keep Appointment
               </button>
               <button
-                onClick={() =>
-                  handleCancel(
-                    cancelTarget.appointment_id,
-                    `${cancelTarget.first_name} ${cancelTarget.last_name}`
-                  )
-                }
+                onClick={() => handleCancel(cancelTarget.appointment_id, `${cancelTarget.first_name} ${cancelTarget.last_name}`)}
                 disabled={cancelLoading}
                 className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
               >

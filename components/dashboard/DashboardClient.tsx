@@ -7,6 +7,9 @@ import { ActivityFeed } from "./ActivityFeed";
 import { TodaySchedule } from "./TodaySchedule";
 import { UnpaidSummary } from "./UnpaidSummary";
 import { AtRiskPatients } from "./AtRiskPatients";
+import { UntreatedPlansWidget } from "./UntreatedPlansWidget";
+import { RecallDueWidget } from "./RecallDueWidget";
+import { EODSummaryWidget } from "./EODSummaryWidget";
 import { MiniCalendar } from "@/components/scheduling/MiniCalendar";
 import { useFetch, useParallelFetch } from "@/hooks/useFetch";
 
@@ -52,6 +55,7 @@ export function DashboardClient({ locale }: { locale: string }) {
     }),
     [startOfDay, endOfDay, startOfMonth]
   );
+
   const { data: parallelData, loading } = useParallelFetch<{
     todayAppointments: Record<string, unknown>[] | { appointments?: Record<string, unknown>[] };
     unpaid: { invoices?: Record<string, unknown>[]; revenueThisMonth?: number };
@@ -60,14 +64,19 @@ export function DashboardClient({ locale }: { locale: string }) {
     monthAppointments: Record<string, unknown>[] | { appointments?: Record<string, unknown>[] };
     dashboardStats: { newPatientsThisMonth?: number };
   }>(requests, 60_000);
-  const { data: userData } = useFetch<{ user?: { full_name?: string; fullName?: string } } | { full_name?: string; fullName?: string }>(
-    "/api/auth/me",
-    { ttl: 60_000 }
-  );
-  const { data: auditData } = useFetch<{ logs?: Record<string, unknown>[]; data?: Record<string, unknown>[] }>(
-    loadAudit ? "/api/audit-log?limit=10" : null,
-    { ttl: 60_000, initialData: { logs: [] } }
-  );
+
+  const { data: userData } = useFetch<
+    | { user?: { full_name?: string; fullName?: string } }
+    | { full_name?: string; fullName?: string }
+  >("/api/auth/me", { ttl: 60_000 });
+
+  const { data: auditData } = useFetch<{
+    logs?: Record<string, unknown>[];
+    data?: Record<string, unknown>[];
+  }>(loadAudit ? "/api/audit-log?limit=10" : null, {
+    ttl: 60_000,
+    initialData: { logs: [] },
+  });
 
   const dateLabel = today.toLocaleDateString(locale, {
     weekday: "long",
@@ -80,29 +89,31 @@ export function DashboardClient({ locale }: { locale: string }) {
   const rawTodayAppointments = Array.isArray(rawToday)
     ? rawToday
     : rawToday?.appointments ?? [];
-  const todayAppointments = rawTodayAppointments.map((a: Record<string, unknown>) => ({
-    ...a,
-    start_time: a.start_time ?? a.startTime,
-    end_time: a.end_time ?? a.endTime,
-    patient:
-      a.patient ??
-      (a.patientName
-        ? {
-            first_name: String(a.patientName).split(" ")[0],
-            last_name: String(a.patientName).split(" ").slice(1).join(" "),
-          }
-        : {}),
-    provider:
-      a.provider ??
-      (a.providerId
-        ? {
-            id: a.providerId,
-            user: { full_name: a.providerName },
-            color_hex: a.providerColor ?? "#3B82F6",
-          }
-        : {}),
-    service: a.service ?? (a.serviceName ? { name_en: a.serviceName } : {}),
-  }));
+  const todayAppointments = rawTodayAppointments.map(
+    (a: Record<string, unknown>) => ({
+      ...a,
+      start_time: a.start_time ?? a.startTime,
+      end_time: a.end_time ?? a.endTime,
+      patient:
+        a.patient ??
+        (a.patientName
+          ? {
+              first_name: String(a.patientName).split(" ")[0],
+              last_name: String(a.patientName).split(" ").slice(1).join(" "),
+            }
+          : {}),
+      provider:
+        a.provider ??
+        (a.providerId
+          ? {
+              id: a.providerId,
+              user: { full_name: a.providerName },
+              color_hex: a.providerColor ?? "#3B82F6",
+            }
+          : {}),
+      service: a.service ?? (a.serviceName ? { name_en: a.serviceName } : {}),
+    })
+  );
 
   const rawMonth = parallelData.monthAppointments;
   const monthAppointments = Array.isArray(rawMonth)
@@ -133,7 +144,8 @@ export function DashboardClient({ locale }: { locale: string }) {
       first_name: p.first_name ?? p.firstName,
       last_name: p.last_name ?? p.lastName,
       phone: p.phone,
-      days_since_last_visit: p.days_since_last_visit ?? p.daysSinceLastVisit ?? 0,
+      days_since_last_visit:
+        p.days_since_last_visit ?? p.daysSinceLastVisit ?? 0,
     })
   );
 
@@ -142,15 +154,16 @@ export function DashboardClient({ locale }: { locale: string }) {
     : parallelData.providers?.providers ?? [];
   const unpaidInvoices = parallelData.unpaid?.invoices ?? [];
   const recentActivity = auditData?.logs ?? auditData?.data ?? [];
-  const userProfile = ((userData && "user" in userData ? userData.user : userData) ??
-    null) as { full_name?: string; fullName?: string } | null;
+  const userProfile = (
+    userData && "user" in userData ? userData.user : userData
+  ) as { full_name?: string; fullName?: string } | null;
   const firstName = (userProfile?.full_name ?? userProfile?.fullName)
     ? (userProfile?.full_name ?? userProfile?.fullName)!.split(" ")[0]
     : "";
 
-  const todayAppointmentsFiltered = (todayAppointments as Record<string, unknown>[]).filter(
-    (a) => a.status !== "canceled"
-  );
+  const todayAppointmentsFiltered = (
+    todayAppointments as Record<string, unknown>[]
+  ).filter((a) => a.status !== "canceled");
 
   const confirmed = (todayAppointments as Record<string, unknown>[]).filter(
     (a) => a.status === "confirmed"
@@ -168,6 +181,7 @@ export function DashboardClient({ locale }: { locale: string }) {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3 mb-6">
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-foreground">
@@ -182,6 +196,7 @@ export function DashboardClient({ locale }: { locale: string }) {
         </div>
       </div>
 
+      {/* KPI Grid */}
       {loading ? (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           {[...Array(5)].map((_, i) => (
@@ -195,16 +210,20 @@ export function DashboardClient({ locale }: { locale: string }) {
           scheduled={scheduled}
           completed={completed}
           totalUnpaid={totalUnpaid}
-            unpaidCount={unpaidInvoices.length}
+          unpaidCount={unpaidInvoices.length}
           criticalCount={criticalPatients.length}
-            completionRate={completionRate}
-            noShowRate={noShowRate}
-            newPatientsThisMonth={parallelData.dashboardStats?.newPatientsThisMonth ?? 0}
+          completionRate={completionRate}
+          noShowRate={noShowRate}
+          newPatientsThisMonth={
+            parallelData.dashboardStats?.newPatientsThisMonth ?? 0
+          }
           locale={locale}
         />
       )}
 
+      {/* Main grid */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+        {/* Left column — timeline + schedule + revenue widgets */}
         <div className="space-y-6 lg:col-span-2">
           {loading ? (
             <>
@@ -224,8 +243,17 @@ export function DashboardClient({ locale }: { locale: string }) {
               />
             </>
           )}
+
+          {/* Revenue features — always load independently */}
+          <EODSummaryWidget locale={locale} />
+
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <UntreatedPlansWidget locale={locale} />
+            <RecallDueWidget locale={locale} />
+          </div>
         </div>
 
+        {/* Right column — calendar + activity + unpaid + at-risk */}
         <div className="space-y-6">
           {loading ? (
             <>
@@ -238,23 +266,18 @@ export function DashboardClient({ locale }: { locale: string }) {
               <MiniCalendar
                 selectedDate={today}
                 onSelectDate={(d) =>
-                  router.push(`/${locale}/appointments?date=${d.toISOString().slice(0, 10)}`)
+                  router.push(
+                    `/${locale}/appointments?date=${d
+                      .toISOString()
+                      .slice(0, 10)}`
+                  )
                 }
                 appointments={monthAppointments as Record<string, unknown>[]}
                 locale={locale}
               />
-              <ActivityFeed
-                activities={recentActivity}
-                locale={locale}
-              />
-              <UnpaidSummary
-                invoices={unpaidInvoices}
-                locale={locale}
-              />
-              <AtRiskPatients
-                patients={criticalPatients}
-                locale={locale}
-              />
+              <ActivityFeed activities={recentActivity} locale={locale} />
+              <UnpaidSummary invoices={unpaidInvoices} locale={locale} />
+              <AtRiskPatients patients={criticalPatients} locale={locale} />
             </>
           )}
         </div>
@@ -262,4 +285,3 @@ export function DashboardClient({ locale }: { locale: string }) {
     </div>
   );
 }
-
